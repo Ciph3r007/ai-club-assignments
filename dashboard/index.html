@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DSi AI Club — Submissions</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>DSi AI Club <span class="muted">— Weekly Submissions</span></h1>
+    <p class="meta">
+      <span id="summary">Loading from GitHub…</span>
+      <span class="dot">·</span>
+      <span>as of <time id="generatedAt">—</time></span>
+      <span class="dot">·</span>
+      <span class="repo-label" id="repoLabel">—</span>
+    </p>
+    <p id="error" class="error" hidden></p>
+  </header>
+
+  <section>
+    <h2>Weeks</h2>
+    <ul id="weeks-list" class="weeks-list"></ul>
+  </section>
+
+  <section>
+    <h2>Submission grid</h2>
+    <div class="table-wrap">
+      <table id="grid">
+        <thead><tr id="grid-head"></tr></thead>
+        <tbody id="grid-body"></tbody>
+      </table>
+    </div>
+    <p class="legend">
+      <span class="cell submitted">✓</span> submitted
+      <span class="cell pending">·</span> pending
+    </p>
+  </section>
+
+  <footer>
+    Live view of <code>main</code> on GitHub. Reload to refresh.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
