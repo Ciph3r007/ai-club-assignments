@@ -1,0 +1,48 @@
+# --- Python ---------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+
+# --- Notebooks ------------------------------------------------------------
+.ipynb_checkpoints/
+# (Notebook outputs ARE intended to be committed — the .ipynb is the deliverable.)
+
+# --- Local databases members may create for run_sql tools ------------------
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+*.duckdb.wal
+
+# --- Secrets / env --------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Editors / IDEs -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Claude Code personal state ------------------------------------------
+.claude/
+
+# --- OS detritus ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
