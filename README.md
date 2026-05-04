@@ -47,7 +47,7 @@ Keep secrets out of notebooks. Use a local `.env`; it's already gitignored.
 The dashboard is a static page that fetches the current state of `main` from
 the GitHub API at load time. There's nothing to regenerate.
 
-- **On GitHub Pages:** once Pages is enabled, it lives at
+- **On GitHub Pages:** It lives at
   `https://ciph3r007.github.io/ai-club-assignments/dashboard/`.
 - **Or open it locally:** double-click `dashboard/index.html`. It still pulls
   live state from GitHub (you just need internet); local-only commits won't
