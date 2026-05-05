@@ -56,13 +56,6 @@ the GitHub API at load time. There's nothing to regenerate.
 A submission cell turns green once the member's `week-NN/` folder on `main`
 contains anything other than the placeholder `dummy.txt`.
 
-### Enabling GitHub Pages (one-time, organiser)
-
-1. Push this repo to `main`.
-2. Repo settings → Pages → Source: "Deploy from a branch" → Branch: `main`,
-   folder: `/ (root)` → Save.
-3. After ~1 min the dashboard is live at the URL above.
-
 ## Adding a new week (organisers)
 
 Drop the task brief at `tasks/week-NN.pdf` (zero-padded). Open whatever tool
