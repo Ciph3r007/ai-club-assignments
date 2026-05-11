@@ -1,0 +1,68 @@
+"""LangChain tool schemas for the querygraph-agent.
+
+Defines the Pydantic input models and StructuredTool instances that are bound
+to the Ollama model via ``model.bind_tools([think_tool, run_sql_tool, db_schema_tool])``.
+
+Tool names are stable identifiers used by the LangGraph router:
+- ``"think"``     - internal reasoning step before answering
+- ``"run_sql"``   - execute a read-only SQL SELECT query
+- ``"db_schema"`` - inspect table/column metadata from the database
+
+Handler implementations live in ``tools/think.py``, ``tools/db_query.py``,
+and ``tools/db_schema.py``; these schema objects are what the model layer
+uses for tool-call parsing.
+"""
+
+from __future__ import annotations
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+
+
+class ThinkInput(BaseModel):
+    """Input schema for the think tool (REQ-THINK-001)."""
+
+    thought: str = Field(..., description="Internal reasoning step")
+
+
+class RunSqlInput(BaseModel):
+    """Input schema for the run_sql tool (REQ-DB-001)."""
+
+    query: str = Field(..., description="SQL SELECT query to execute")
+
+
+class DbSchemaInput(BaseModel):
+    """Input schema for the db_schema tool."""
+
+    table_name: str | None = Field(
+        default=None,
+        description="Table name to inspect. Omit to list all tables.",
+    )
+
+
+@tool("think", args_schema=ThinkInput, return_direct=False)
+def think_tool(thought: str) -> str:
+    """Use this tool for internal reasoning steps before answering."""
+    raise NotImplementedError("Schema-only stub — handler is registered via tool_registry")
+
+
+@tool("run_sql", args_schema=RunSqlInput, return_direct=False)
+def run_sql_tool(query: str) -> str:
+    """Execute a read-only SQL SELECT query against the database."""
+    raise NotImplementedError("Schema-only stub — handler is registered via tool_registry")
+
+
+@tool("db_schema", args_schema=DbSchemaInput, return_direct=False)
+def db_schema_tool(table_name: str | None = None) -> str:
+    """Inspect table and column metadata from the database schema."""
+    raise NotImplementedError("Schema-only stub — handler is registered via tool_registry")
+
+
+__all__ = [
+    "RunSqlInput",
+    "DbSchemaInput",
+    "ThinkInput",
+    "run_sql_tool",
+    "db_schema_tool",
+    "think_tool",
+]
