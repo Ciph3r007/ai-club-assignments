@@ -112,6 +112,30 @@ def create_graph(
 # ---------------------------------------------------------------------------
 
 
+def _db_result_from_tool_msg(tool_msg: ToolMessage) -> DbResultEvent | None:
+    """Extract a DbResultEvent from a ToolMessage, or None if not a db_result."""
+    try:
+        data = json.loads(tool_msg.content)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("type") != "db_result":
+        return None
+    return DbResultEvent.model_validate(data)
+
+
+def _final_assistant_event(messages: list[Any]) -> AssistantTextEvent | None:
+    """Return an AssistantTextEvent from the last message, or None."""
+    if not messages:
+        return None
+    last = messages[-1]
+    if not isinstance(last, AIMessage):
+        return None
+    text = ai_message_to_text(last)
+    if not text:
+        return None
+    return AssistantTextEvent(content=text)
+
+
 def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
     """Convert graph state to an ordered list of `AgentEvent` objects.
 
@@ -119,26 +143,18 @@ def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
     (JSON-serialized by `run_sql_node`) before appending the final
     `AssistantTextEvent`.  Always ends with `DoneEvent`.
     """
-    events: list[AgentEvent] = []
     messages: list[Any] = state.get("messages", [])
 
-    for tool_msg in (m for m in current_turn_messages(state) if isinstance(m, ToolMessage)):
-        try:
-            data = json.loads(tool_msg.content)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-        if isinstance(data, dict) and data.get("type") == "db_result":
-            events.append(DbResultEvent.model_validate(data))
+    db_events = [
+        event
+        for m in current_turn_messages(state)
+        if isinstance(m, ToolMessage)
+        for event in [_db_result_from_tool_msg(m)]
+        if event is not None
+    ]
+    assistant = _final_assistant_event(messages)
 
-    if messages:
-        last = messages[-1]
-        if isinstance(last, AIMessage):
-            text = ai_message_to_text(last)
-            if text:
-                events.append(AssistantTextEvent(content=text))
-
-    events.append(DoneEvent())
-    return events
+    return [*db_events, *([assistant] if assistant else []), DoneEvent()]
 
 
 # ---------------------------------------------------------------------------
