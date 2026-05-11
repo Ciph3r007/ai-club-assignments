@@ -1,15 +1,15 @@
 """LangChain tool schemas for the querygraph-agent.
 
 Defines the Pydantic input models and StructuredTool instances that are bound
-to the Ollama model via ``model.bind_tools([think_tool, run_sql_tool, db_schema_tool])``.
+to the Ollama model via `model.bind_tools([think_tool, run_sql_tool, db_schema_tool])`.
 
 Tool names are stable identifiers used by the LangGraph router:
-- ``"think"``     - internal reasoning step before answering
-- ``"run_sql"``   - execute a read-only SQL SELECT query
-- ``"db_schema"`` - inspect table/column metadata from the database
+- `"think"`     - internal reasoning step before answering
+- `"run_sql"`   - execute a read-only SQL SELECT query
+- `"db_schema"` - inspect table/column metadata from the database
 
-Handler implementations live in ``tools/think.py``, ``tools/db_query.py``,
-and ``tools/db_schema.py``; these schema objects are what the model layer
+Handler implementations live in `tools/think.py`, `tools/db_query.py`,
+and `tools/db_schema.py`; these schema objects are what the model layer
 uses for tool-call parsing.
 """
 
@@ -20,13 +20,13 @@ from pydantic import BaseModel, Field
 
 
 class ThinkInput(BaseModel):
-    """Input schema for the think tool (REQ-THINK-001)."""
+    """Input schema for the think tool."""
 
     thought: str = Field(..., description="Internal reasoning step")
 
 
 class RunSqlInput(BaseModel):
-    """Input schema for the run_sql tool (REQ-DB-001)."""
+    """Input schema for the run_sql tool."""
 
     query: str = Field(..., description="SQL SELECT query to execute")
 

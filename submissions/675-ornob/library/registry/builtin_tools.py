@@ -1,7 +1,7 @@
-"""Register the built-in tools into the module-level ``tool_registry`` singleton.
+"""Register the built-in tools into the module-level `tool_registry` singleton.
 
-Import this module once before calling ``create_graph`` to ensure all built-in
-tools are available.  ``graph_factory.py`` imports it automatically - external
+Import this module once before calling `create_graph` to ensure all built-in
+tools are available.  `graph_factory.py` imports it automatically - external
 callers do not need to import it directly unless they are bypassing the factory.
 
 Registration is idempotent - re-importing this module overwrites the same keys.

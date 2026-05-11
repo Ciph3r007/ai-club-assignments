@@ -1,35 +1,35 @@
-"""Graph factory and concrete ``AgentService`` implementation.
+"""Graph factory and concrete `AgentService` implementation.
 
-``create_graph``
-    Builds and compiles a LangGraph ``StateGraph`` driven by ``tool_registry``:
+`create_graph`
+    Builds and compiles a LangGraph `StateGraph` driven by `tool_registry`:
 
     - Reads tool schemas, node names, and retry flags from
-      ``tool_registry.all()`` - adding a new tool to the registry
+      `tool_registry.all()` - adding a new tool to the registry
       automatically wires it into the graph with zero changes here.
-    - A ``call_model`` entry node that invokes the configured LLM backend.
+    - A `call_model` entry node that invokes the configured LLM backend.
     - Conditional routing to tool-handler nodes based on the last tool call.
-    - ``MemorySaver`` checkpointer for in-process, per-thread conversation memory.
+    - `MemorySaver` checkpointer for in-process, per-thread conversation memory.
 
     Memory is **process-local** and resets when the process restarts.  For
-    persistence across restarts, replace ``MemorySaver`` with a persistent
-    checkpointer (e.g. ``SqliteSaver``, ``PostgresSaver``).
+    persistence across restarts, replace `MemorySaver` with a persistent
+    checkpointer (e.g. `SqliteSaver`, `PostgresSaver`).
 
-``GraphAgentService``
-    Concrete ``AgentService`` that wraps the compiled graph, enforcing
-    ownership checks and converting graph output to ``AgentEvent`` lists /
+`GraphAgentService`
+    Concrete `AgentService` that wraps the compiled graph, enforcing
+    ownership checks and converting graph output to `AgentEvent` lists /
     async generators.
 
 Event extraction
 ----------------
-``_extract_events_from_state`` walks the current turn's ``ToolMessage`` objects
-to surface ``DbResultEvent`` instances (serialized as JSON by ``run_sql_node``)
-before appending the final ``AssistantTextEvent``.  Current-turn scoping is
-delegated to ``library.agent.tracing.current_turn_messages``.
+`_extract_events_from_state` walks the current turn's `ToolMessage` objects
+to surface `DbResultEvent` instances (serialized as JSON by `run_sql_node`)
+before appending the final `AssistantTextEvent`.  Current-turn scoping is
+delegated to `library.agent.tracing.current_turn_messages`.
 
 Streaming
 ---------
-``stream_turn`` uses ``astream_events(version="v2")`` which fires
-``on_chat_model_stream`` events for every token the LLM emits, giving true
+`stream_turn` uses `astream_events(version="v2")` which fires
+`on_chat_model_stream` events for every token the LLM emits, giving true
 incremental output instead of waiting for the full response.
 """
 
@@ -80,23 +80,16 @@ def create_graph(
     llm: BaseChatModel | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph[Any]:
-    """Create and compile a LangGraph agent graph driven by ``tool_registry``.
+    """Create and compile a LangGraph agent graph driven by `tool_registry`.
 
-    Parameters
-    ----------
-    settings:
-        Application settings (used for OllamaClient and system_prompt when
-        *llm* is ``None``).
-    executor:
-        Database query executor injected into tool nodes.
-    llm:
-        Optional ``BaseChatModel`` to use as the LLM backend.  If ``None``,
-        an ``OllamaClient`` is created from *settings*.  Pass any
-        LangChain-compatible model (Claude, GPT-4, local llama.cpp, etc.).
-    checkpointer:
-        Optional LangGraph checkpointer for conversation memory persistence.
-        If ``None``, an in-process ``MemorySaver`` is used (resets on restart).
-        Pass ``SqliteSaver`` or ``PostgresSaver`` for durable persistence.
+    Args:
+        settings: Application settings — used for OllamaClient and system_prompt
+            when llm is None.
+        executor: Database query executor injected into tool nodes.
+        llm: Optional LangChain-compatible model to use as the LLM backend.
+            If None, an OllamaClient is created from settings.
+        checkpointer: Optional LangGraph checkpointer for conversation memory.
+            If None, an in-process MemorySaver is used (resets on restart).
     """
     if llm is None:
         client = OllamaClient(settings=settings, tools=tool_registry.schemas())
@@ -136,11 +129,11 @@ def create_graph(
 
 
 def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
-    """Convert graph state to an ordered list of ``AgentEvent`` objects.
+    """Convert graph state to an ordered list of `AgentEvent` objects.
 
-    Surfaces ``DbResultEvent`` instances from ToolMessages in the current turn
-    (JSON-serialized by ``run_sql_node``) before appending the final
-    ``AssistantTextEvent``.  Always ends with ``DoneEvent``.
+    Surfaces `DbResultEvent` instances from ToolMessages in the current turn
+    (JSON-serialized by `run_sql_node`) before appending the final
+    `AssistantTextEvent`.  Always ends with `DoneEvent`.
     """
     events: list[AgentEvent] = []
     messages: list[Any] = state.get("messages", [])
@@ -170,7 +163,7 @@ def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
 
 
 class GraphAgentService(AgentService):
-    """Concrete ``AgentService`` backed by a compiled LangGraph graph."""
+    """Concrete `AgentService` backed by a compiled LangGraph graph."""
 
     def __init__(
         self,
@@ -193,10 +186,10 @@ class GraphAgentService(AgentService):
     ) -> list[AgentEvent]:
         """Execute one conversational turn and return all events.
 
-        Returns ``DbResultEvent`` objects for any queries executed during the
-        turn, followed by ``AssistantTextEvent`` and always ends with
-        ``DoneEvent``.  Ownership failure and graph exceptions are surfaced as
-        ``ErrorEvent``; the method never raises.
+        Returns `DbResultEvent` objects for any queries executed during the
+        turn, followed by `AssistantTextEvent` and always ends with
+        `DoneEvent`.  Ownership failure and graph exceptions are surfaced as
+        `ErrorEvent`; the method never raises.
         """
         err = self._check_ownership(session_context, self._ownership_store)
         if err is not None:
@@ -223,11 +216,11 @@ class GraphAgentService(AgentService):
     ) -> AsyncGenerator[AgentEvent, None]:
         """Execute one conversational turn and yield events as tokens arrive.
 
-        Uses ``astream_events(version="v2")`` which fires
-        ``on_chat_model_stream`` for every token, giving true incremental
+        Uses `astream_events(version="v2")` which fires
+        `on_chat_model_stream` for every token, giving true incremental
         output.  Tool-call frames (where the model is constructing a function
         call, not writing final prose) are filtered out so only user-visible
-        text is yielded.  Always ends with ``DoneEvent``.
+        text is yielded.  Always ends with `DoneEvent`.
         """
 
         async def _gen() -> AsyncGenerator[AgentEvent, None]:

@@ -1,4 +1,4 @@
-"""Reusable SQL execution helpers built on top of ``QueryExecutor``.
+"""Reusable SQL execution helpers built on top of `QueryExecutor`.
 
 This module provides lightweight, serializable result shaping for callers that
 need a stable structure independent of SQLAlchemy internals.
@@ -22,7 +22,7 @@ class SqlExecutionResult:
 
 
 async def execute_sql(sql: str, executor: QueryExecutor) -> SqlExecutionResult:
-    """Execute SQL via ``QueryExecutor`` and return a serializable result model."""
+    """Execute SQL via `QueryExecutor` and return a serializable result model."""
     result = await executor.execute(sql)
     return _to_execution_result(result)
 

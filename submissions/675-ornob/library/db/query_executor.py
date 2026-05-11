@@ -1,10 +1,9 @@
 """Bounded, read-only SQL query executor.
 
-REQ-DB-001 / NFR-DB-001 / NFR-DB-002:
-- All queries are validated by ``sql_guard.validate_sql`` before execution.
-- Results are capped at ``Settings.db_max_rows`` rows.
-- Queries are bounded by ``Settings.db_query_timeout_seconds``.
-- Connection errors are wrapped in ``QueryGraphError`` with a user-safe message.
+All queries are validated by `sql_guard.validate_sql` before execution.
+Results are capped at `Settings.db_max_rows` rows.
+Queries are bounded by `Settings.db_query_timeout_seconds`.
+Connection errors are wrapped in `QueryGraphError` with a user-safe message.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from library.exceptions import QueryGraphError
 
 @dataclass
 class QueryResult:
-    """Structured result returned by ``QueryExecutor.execute``."""
+    """Structured result returned by `QueryExecutor.execute`."""
 
     sql: str
     rows: list[dict[str, Any]] = field(default_factory=list)
@@ -73,11 +72,11 @@ class SchemaInfo:
 class QueryExecutor:
     """Execute validated, read-only SQL queries against the configured database.
 
-    Uses synchronous SQLAlchemy (wrapped with ``asyncio.to_thread``) so the
-    caller can ``await`` the result without blocking the event loop.
+    Uses synchronous SQLAlchemy (wrapped with `asyncio.to_thread`) so the
+    caller can `await` the result without blocking the event loop.
 
     The engine is created once at construction time and reused across calls.
-    Query timeout is enforced server-side via PostgreSQL ``statement_timeout``,
+    Query timeout is enforced server-side via PostgreSQL `statement_timeout`,
     which ensures the DB cancels the query rather than leaving threads running.
     """
 
@@ -95,23 +94,17 @@ class QueryExecutor:
     # ------------------------------------------------------------------
 
     async def inspect_schema(self, table_name: str | None = None) -> SchemaInfo:
-        """Inspect table/column metadata from ``information_schema``.
+        """Inspect table/column metadata from `information_schema`.
 
-        Parameters
-        ----------
-        table_name:
-            When provided, restrict results to that table name across all
-            non-system schemas.  When ``None``, returns all user tables.
+        Args:
+            table_name: When provided, restrict results to that table name across
+                all non-system schemas. When None, returns all user tables.
 
-        Returns
-        -------
-        SchemaInfo
-            Aggregated column metadata grouped by table.
+        Returns:
+            SchemaInfo: Aggregated column metadata grouped by table.
 
-        Raises
-        ------
-        QueryGraphError
-            If the DB connection or query fails.
+        Raises:
+            QueryGraphError: If the DB connection or query fails.
         """
         try:
             return await asyncio.to_thread(self._run_schema_sync, table_name)
@@ -119,7 +112,7 @@ class QueryExecutor:
             raise QueryGraphError(f"Schema inspection failed: {exc}") from exc
 
     async def execute(self, sql: str) -> QueryResult:
-        """Execute a validated SELECT statement and return a ``QueryResult``.
+        """Execute a validated SELECT statement and return a `QueryResult`.
 
         Raises:
             SqlGuardError: If the SQL fails the safety check.
@@ -144,8 +137,8 @@ class QueryExecutor:
     def _run_sync(self, sql: str) -> QueryResult:
         """Execute *sql* synchronously, applying the row cap.
 
-        Intended to be called via ``asyncio.to_thread``.  Timeout is enforced
-        server-side by setting ``statement_timeout`` on the connection.
+        Intended to be called via `asyncio.to_thread`.  Timeout is enforced
+        server-side by setting `statement_timeout` on the connection.
         """
         limited_sql = self._apply_limit(sql)
         timeout_ms = int(self._settings.db_query_timeout_seconds * 1000)
@@ -165,12 +158,12 @@ class QueryExecutor:
         return sql
 
     def _run_schema_sync(self, table_name: str | None) -> SchemaInfo:
-        """Query ``information_schema.columns`` synchronously.
+        """Query `information_schema.columns` synchronously.
 
-        Intended to be called via ``asyncio.to_thread``.
+        Intended to be called via `asyncio.to_thread`.
 
         System schemas are excluded via a literal IN list - SQLAlchemy's
-        ``text()`` does not expand Python tuples for parametrised IN clauses,
+        `text()` does not expand Python tuples for parametrised IN clauses,
         so binding them as a parameter would cause a PostgreSQL syntax error.
         """
         _EXCLUDE = (

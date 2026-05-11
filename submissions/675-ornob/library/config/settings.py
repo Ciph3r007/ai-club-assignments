@@ -1,13 +1,8 @@
 """Typed application settings for library.
 
-Settings are read from environment variables and an optional ``.env`` file.
+Settings are read from environment variables and an optional `.env` file.
 All values have safe defaults so the application starts in a local-dev
 environment without any configuration.
-
-NFR mapping
------------
-- NFR-DB-001: ``db_query_timeout_seconds`` default=10, range 1..120
-- NFR-DB-002: ``db_max_rows`` default=100, range 1..1000
 """
 
 from __future__ import annotations
@@ -19,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central typed settings loaded from environment / ``.env``."""
+    """Central typed settings loaded from environment / `.env`."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -55,13 +50,13 @@ class Settings(BaseSettings):
         default=10,
         ge=1,
         le=120,
-        description="Maximum seconds to wait for a DB query result.  NFR-DB-001.",
+        description="Maximum seconds to wait for a DB query result.",
     )
     db_max_rows: int = Field(
         default=100,
         ge=1,
         le=1000,
-        description="Maximum rows returned from a single query.  NFR-DB-002.",
+        description="Maximum rows returned from a single query.",
     )
 
     # ------------------------------------------------------------------
@@ -96,10 +91,10 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return the cached singleton ``Settings`` instance.
+    """Return the cached singleton `Settings` instance.
 
-    Using ``lru_cache`` ensures that the ``.env`` file is read only once per
-    process lifetime, making repeated calls free.  Call ``get_settings.cache_clear()``
+    Using `lru_cache` ensures that the `.env` file is read only once per
+    process lifetime, making repeated calls free.  Call `get_settings.cache_clear()`
     in tests to reset between cases.
     """
     return Settings()

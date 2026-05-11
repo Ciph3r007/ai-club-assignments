@@ -1,8 +1,8 @@
 """Typed event models for agent stream and non-stream outputs.
 
-All events are ``pydantic.BaseModel`` subclasses with a ``type`` literal field
-that acts as a discriminator.  Callers can use ``isinstance`` checks or pattern
-match on ``event.type`` to handle each variant.
+All events are `pydantic.BaseModel` subclasses with a `type` literal field
+that acts as a discriminator.  Callers can use `isinstance` checks or pattern
+match on `event.type` to handle each variant.
 
 Event taxonomy
 --------------
@@ -22,8 +22,8 @@ DoneEvent
     Signals that the turn is complete.  Always the last event in a stream.
 
 ErrorEvent
-    A typed error that occurred during the turn.  The ``error_type`` field
-    maps to one of the ``QueryGraphError`` subclass names so callers can
+    A typed error that occurred during the turn.  The `error_type` field
+    maps to one of the `QueryGraphError` subclass names so callers can
     branch without catching exceptions.
 """
 
@@ -78,9 +78,9 @@ class DoneEvent(_BaseEvent):
 class ErrorEvent(_BaseEvent):
     """Typed error that occurred during the turn.
 
-    ``error_type`` is the short class name of the underlying domain exception
-    (e.g. ``"ModelToolCallError"``, ``"SqlGuardError"``).  When the error
-    originates outside the domain hierarchy, ``error_type`` is ``"UnknownError"``.
+    `error_type` is the short class name of the underlying domain exception
+    (e.g. `"ModelToolCallError"`, `"SqlGuardError"`).  When the error
+    originates outside the domain hierarchy, `error_type` is `"UnknownError"`.
     """
 
     type: Literal["error"] = "error"
@@ -91,7 +91,7 @@ class ErrorEvent(_BaseEvent):
     message: str = Field(..., description="Human-readable description of the error.")
 
 
-# Union type for exhaustive event handling, with a discriminator on the ``type``
+# Union type for exhaustive event handling, with a discriminator on the `type`
 # field for efficient and unambiguous parsing.
 AgentEvent = Annotated[
     ThinkingEvent | AssistantTextEvent | DbResultEvent | DoneEvent | ErrorEvent,

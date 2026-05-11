@@ -1,12 +1,10 @@
 # src/library/db/sql_guard.py
 """Read-only SQL safety guard.
 
-Validates SQL statements against a pipeline of ``SqlValidationRule`` objects.
-Rules are data - add, remove, or reorder entries in ``_RULES`` without
-touching control flow.
-
-REQ-DB-002: Only plain SELECT statements without destructive keywords are
-accepted.
+Validates SQL statements against a pipeline of `SqlValidationRule` objects.
+Rules are data — add, remove, or reorder entries in `_RULES` without
+touching control flow. Only plain SELECT statements without destructive
+keywords are accepted.
 """
 
 from __future__ import annotations
@@ -28,8 +26,8 @@ _DESTRUCTIVE_RE = re.compile(
 class SqlValidationRule:
     """A single, immutable SQL validation predicate.
 
-    ``check`` receives the normalised SQL string and returns ``True`` when the
-    statement passes the rule.  ``error`` is raised as ``SqlGuardError`` on
+    `check` receives the normalised SQL string and returns `True` when the
+    statement passes the rule.  `error` is raised as `SqlGuardError` on
     failure.
     """
 
@@ -66,10 +64,10 @@ _RULES: tuple[SqlValidationRule, ...] = (
 
 
 def validate_sql(sql: str) -> str:
-    """Validate *sql* against ``_RULES`` and return the normalised statement.
+    """Validate *sql* against `_RULES` and return the normalised statement.
 
-    Raises ``SqlGuardError`` on the first failing rule.  The error message for
-    the ``select-only`` rule is interpolated with the actual statement prefix.
+    Raises `SqlGuardError` on the first failing rule.  The error message for
+    the `select-only` rule is interpolated with the actual statement prefix.
     """
     normalized = sql.strip().rstrip(";").strip()
     for rule in _RULES:

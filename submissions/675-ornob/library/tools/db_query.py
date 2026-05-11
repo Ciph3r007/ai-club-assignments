@@ -20,9 +20,18 @@ _ERRORS = ErrorMapper(
 
 
 class RunSqlHandler:
-    """Executes a validated SQL SELECT query and returns a ``DbResultEvent``."""
+    """Executes a validated SQL SELECT query and returns a `DbResultEvent`."""
 
     async def handle(self, executor: QueryExecutor, **kwargs: Any) -> DbResultEvent | ErrorEvent:
+        """Execute the SQL query and return the result or an error event.
+
+        Args:
+            executor: The database executor to run the query against.
+            **kwargs: Must contain a `query` key with the SQL SELECT string.
+
+        Returns:
+            DbResultEvent on success, ErrorEvent on validation or execution failure.
+        """
         query: str = kwargs.get("query")
         if not query:
             return ErrorEvent(error_type="ConfigurationError", message="Missing required 'query'.")
@@ -38,6 +47,7 @@ class RunSqlHandler:
 
 
 async def handle_run_sql(query: str, executor: QueryExecutor) -> DbResultEvent | ErrorEvent:
+    """Run a SQL SELECT query and return the result or an error event."""
     return await RunSqlHandler().handle(executor, query=query)
 
 

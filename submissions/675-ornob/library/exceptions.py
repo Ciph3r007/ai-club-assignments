@@ -1,7 +1,7 @@
 """Package-level domain exceptions for library.
 
-All exceptions inherit from ``QueryGraphError`` so callers can catch the
-entire family with a single ``except QueryGraphError`` clause while still
+All exceptions inherit from `QueryGraphError` so callers can catch the
+entire family with a single `except QueryGraphError` clause while still
 being able to handle specific sub-cases precisely.
 """
 
@@ -15,7 +15,7 @@ class QueryGraphError(Exception):
 class OwnershipError(QueryGraphError):
     """Raised when a resource is accessed by an unauthorised user.
 
-    Typically triggered when the ``user_id`` in the session context does not
+    Typically triggered when the `user_id` in the session context does not
     own the resource being requested.
     """
 

@@ -13,7 +13,7 @@ from library.api.events import DbResultEvent
 
 
 def format_db_result(event: DbResultEvent) -> str:
-    """Format a ``DbResultEvent`` as a labelled ASCII table.
+    """Format a `DbResultEvent` as a labelled ASCII table.
 
     Produces output like::
 

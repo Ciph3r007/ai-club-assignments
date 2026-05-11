@@ -11,11 +11,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 def current_turn_messages(state: dict[str, Any]) -> list[Any]:
     """Return messages produced in the current turn.
 
-    ``state["messages"]`` accumulates the full thread history via the
-    ``add_messages`` reducer.  This returns the slice starting after the last
-    user-originated ``HumanMessage`` (i.e. the most recent turn boundary).
+    `state["messages"]` accumulates the full thread history via the
+    `add_messages` reducer.  This returns the slice starting after the last
+    user-originated `HumanMessage` (i.e. the most recent turn boundary).
 
-    Repair prompts injected by ``sql_repair_node`` use ``name="repair"`` and
+    Repair prompts injected by `sql_repair_node` use `name="repair"` and
     are skipped so the boundary stays at the original user input.
     """
     msgs: list[Any] = state.get("messages", [])
@@ -33,7 +33,7 @@ def current_turn_messages(state: dict[str, Any]) -> list[Any]:
 def tool_call_names(messages: list[Any]) -> list[str]:
     """Return ordered tool-call names from *messages*.
 
-    Collects the ``name`` field from every tool call on every ``AIMessage``
+    Collects the `name` field from every tool call on every `AIMessage`
     in *messages*, preserving invocation order.
     """
     names: list[str] = []

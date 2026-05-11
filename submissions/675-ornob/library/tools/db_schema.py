@@ -18,9 +18,18 @@ _ERRORS = ErrorMapper(
 
 
 class DbSchemaHandler:
-    """Inspects database schema metadata and returns it as a ``ThinkingEvent``."""
+    """Inspects database schema metadata and returns it as a `ThinkingEvent`."""
 
     async def handle(self, executor: QueryExecutor, **kwargs: Any) -> ThinkingEvent | ErrorEvent:
+        """Fetch schema metadata and return it as a ThinkingEvent.
+
+        Args:
+            executor: The database executor used to query information_schema.
+            **kwargs: May contain `table_name` (str | None) to filter results.
+
+        Returns:
+            ThinkingEvent with formatted schema text, or ErrorEvent on failure.
+        """
         table_name: str | None = kwargs.get("table_name")
         try:
             schema = await executor.inspect_schema(table_name=table_name)
@@ -34,6 +43,7 @@ async def handle_db_schema(
     executor: QueryExecutor,
     table_name: str | None = None,
 ) -> ThinkingEvent | ErrorEvent:
+    """Fetch schema metadata for one table or all tables."""
     return await DbSchemaHandler().handle(executor, table_name=table_name)
 
 

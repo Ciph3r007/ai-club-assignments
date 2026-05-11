@@ -1,13 +1,13 @@
 # src/library/agent/nodes.py
 """LangGraph node implementations for the querygraph-agent graph.
 
-All tool-handling nodes are generated via the generic ``tool_node`` factory
-function, which resolves the handler from ``tool_registry`` at invocation time.
-Per-tool node functions (``think_node``, ``run_sql_node``, ``db_schema_node``)
-are removed - ``graph_factory`` uses ``partial(tool_node, executor=executor, tool_name=...)``
+All tool-handling nodes are generated via the generic `tool_node` factory
+function, which resolves the handler from `tool_registry` at invocation time.
+Per-tool node functions (`think_node`, `run_sql_node`, `db_schema_node`)
+are removed - `graph_factory` uses `partial(tool_node, executor=executor, tool_name=...)`
 instead.
 
-``sql_repair_node`` is NOT a tool node - it injects a repair prompt and is
+`sql_repair_node` is NOT a tool node - it injects a repair prompt and is
 always registered explicitly in the graph.
 """
 
@@ -38,7 +38,7 @@ _TOOL_CONTENT_EXTRACTORS: dict[str, Callable[[Any], str]] = {
 
 
 def _to_tool_content(event: Any) -> str:
-    """Serialize an agent event to a string for a ``ToolMessage``."""
+    """Serialize an agent event to a string for a `ToolMessage`."""
     extractor = _TOOL_CONTENT_EXTRACTORS.get(event.type)
     return extractor(event) if extractor else event.model_dump_json()
 
@@ -48,8 +48,8 @@ def _to_tool_content(event: Any) -> str:
 # ---------------------------------------------------------------------------
 
 _TOOL_CALL_FENCE_PATTERNS: tuple[str, ...] = (
-    r"```json\s*([\s\S]*?)```",
-    r"```\s*([\s\S]*?)```",
+    r"``json\s*([\s\S]*?)``",
+    r"``\s*([\s\S]*?)``",
 )
 
 
@@ -137,10 +137,10 @@ async def tool_node(
     *,
     registry: ToolRegistry | None = None,
 ) -> dict[str, Any]:
-    """Generic tool execution node - resolves handler from ``tool_registry``.
+    """Generic tool execution node - resolves handler from `tool_registry`.
 
     Pass *registry* in tests to avoid patching the module-level singleton.
-    ``graph_factory`` creates partials without *registry* so they use the global.
+    `graph_factory` creates partials without *registry* so they use the global.
     """
     _registry = registry if registry is not None else tool_registry
     last = state["messages"][-1]
