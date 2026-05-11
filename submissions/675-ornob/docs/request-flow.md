@@ -107,7 +107,22 @@ There is no special memory module. **The agent remembers because it reads the en
 LangGraph stores this history in a `MemorySaver` — a Python dict keyed by `thread_id`. Each new turn appends to the
 list; the full list goes to the LLM every time.
 
-Different `thread_id` — completely separate conversation, no memory shared.
+**Same thread — memory persists. Different thread — memory resets.**
+
+```
+  Thread A  (thread_id = "session-alice")
+  ─────────────────────────────────────────────────
+  Turn 1  →  "My name is Alice."
+  Turn 2  →  "What is my name?"  →  LLM: "Alice."   (remembers)
+
+  Thread B  (thread_id = "session-bob")
+  ─────────────────────────────────────────────────
+  Turn 1  →  "What is my name?"  →  LLM: "I don't know your name."
+             (Thread B has zero history from Thread A)
+```
+
+`MemorySaver` is an in-process Python dict — no database, no file on disk. Restarting the Python kernel
+wipes all threads. This satisfies the assignment constraint: conversations are not persisted.
 
 ---
 

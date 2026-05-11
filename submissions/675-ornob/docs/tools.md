@@ -46,15 +46,23 @@ result back — then the LLM decides what to do next.
 **Why it exists:** small local models (like Qwen or LLaMA) do not have a built-in reasoning step. Without one, they can
 jump straight to writing SQL and get it wrong. The `think` tool forces the model to write down its reasoning first.
 
-**How it works:** the LLM calls `think("I should check the schema before writing the join...")`. The tool echoes it back
-as a `ThinkingEvent`. No side effects — it is just a named slot to externalise thought.
+**How it works:** the LLM passes its current chain-of-thought as `thought`. The tool returns the string
+`"Thought captured."` back to the LLM as a confirmation — nothing more. The actual thought is wrapped in a
+`ThinkingEvent` so the caller can display it.
 
 ```
-  think("I need to join orders and order_details...")
+  think("I need to join orders and order_details on order_id...")
        │
-       ▼
-  ThinkingEvent(content="I need to join orders and order_details...")
+       ├─► returns "Thought captured." to LLM  (LLM sees this and continues)
+       │
+       └─► ThinkingEvent(content="I need to join orders and order_details on order_id...")
+                         (caller sees this and can display it)
 ```
+
+**What counts as good reasoning:** the thought must contain real intermediate steps — *"I need to join orders and
+customers on customer_id because the question asks for customer names"* — not a restatement of the question
+(*"The user wants to know the top 5 customers."*). A restatement adds no value and does not satisfy the requirement.
+Case 5 in the notebook shows an example of genuine intermediate reasoning captured by this tool.
 
 **In the notebook:** Case 5 shows the raw output. Case 6 proves `think` fires *before* `run_sql`.
 
