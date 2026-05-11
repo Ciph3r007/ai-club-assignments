@@ -1,36 +1,17 @@
-"""Graph factory and concrete `AgentService` implementation.
+"""Graph factory and concrete AgentService implementation.
 
-`create_graph`
-    Builds and compiles a LangGraph `StateGraph` driven by `tool_registry`:
+`create_graph` builds a LangGraph StateGraph driven by the tool registry.
+Adding a tool to the registry automatically wires it into the graph — no
+changes needed here.
 
-    - Reads tool schemas, node names, and retry flags from
-      `tool_registry.all()` - adding a new tool to the registry
-      automatically wires it into the graph with zero changes here.
-    - A `call_model` entry node that invokes the configured LLM backend.
-    - Conditional routing to tool-handler nodes based on the last tool call.
-    - `MemorySaver` checkpointer for in-process, per-thread conversation memory.
+`GraphAgentService` wraps the compiled graph with ownership checks and
+converts the raw graph state into typed AgentEvent lists or async generators.
 
-    Memory is **process-local** and resets when the process restarts.  For
-    persistence across restarts, replace `MemorySaver` with a persistent
-    checkpointer (e.g. `SqliteSaver`, `PostgresSaver`).
+Event extraction reads ToolMessages from the current turn and surfaces
+DbResultEvent instances before appending the final AssistantTextEvent.
 
-`GraphAgentService`
-    Concrete `AgentService` that wraps the compiled graph, enforcing
-    ownership checks and converting graph output to `AgentEvent` lists /
-    async generators.
-
-Event extraction
-----------------
-`_extract_events_from_state` walks the current turn's `ToolMessage` objects
-to surface `DbResultEvent` instances (serialized as JSON by `run_sql_node`)
-before appending the final `AssistantTextEvent`.  Current-turn scoping is
-delegated to `library.agent.tracing.current_turn_messages`.
-
-Streaming
----------
-`stream_turn` uses `astream_events(version="v2")` which fires
-`on_chat_model_stream` events for every token the LLM emits, giving true
-incremental output instead of waiting for the full response.
+Streaming uses `astream_events(version="v2")` to yield tokens incrementally
+instead of waiting for the full response.
 """
 
 from __future__ import annotations

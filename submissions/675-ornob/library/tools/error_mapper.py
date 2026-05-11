@@ -1,19 +1,18 @@
 """Exception-to-ErrorEvent lookup table.
 
-Replaces multi-except chains in tool handlers.  Each handler owns an
+Replaces multi-except chains in tool handlers. Each handler owns an
 `ErrorMapper` instance that maps exception types to `ErrorEvent` error_type
-strings.  The first matching type wins; if none match, `"UnknownError"` is
-returned.
+strings. The first matching type wins; if none match, "UnknownError" is used.
 
-IMPORTANT — tuple ordering: subclasses MUST appear before their parent types.
-If a parent appears first, all subclass entries after it become unreachable
-(`isinstance` matches the parent first).  The constructor validates this and
-raises `ConfigurationError` for invalid orderings.
+Subclasses MUST appear before their parent types in the mapping. If a parent
+appears first, all subclass entries after it become unreachable because
+isinstance matches the parent first. The constructor validates ordering and
+raises ConfigurationError for invalid mappings.
 
-Usage::
+Example usage:
 
     _ERRORS = ErrorMapper(mapping=(
-        (SqlGuardError, "SqlGuardError"),   # subclass first
+        (SqlGuardError, "SqlGuardError"),    # subclass first
         (QueryGraphError, "QueryGraphError"),  # parent after
     ))
 

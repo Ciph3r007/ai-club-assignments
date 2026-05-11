@@ -1,30 +1,14 @@
-"""Typed event models for agent stream and non-stream outputs.
+"""Typed event models for agent outputs.
 
-All events are `pydantic.BaseModel` subclasses with a `type` literal field
-that acts as a discriminator.  Callers can use `isinstance` checks or pattern
-match on `event.type` to handle each variant.
+All events are Pydantic BaseModel subclasses. Branch on `event.type` or use
+isinstance checks to handle each variant.
 
-Event taxonomy
---------------
-ThinkingEvent
-    Internal reasoning emitted while the agent is working.  Should not be
-    shown verbatim to end users in production but is useful for debugging and
-    transparency UIs.
-
-AssistantTextEvent
-    A finalized natural-language response from the agent.
-
-DbResultEvent
-    The result of a SQL query executed by the agent, including the SQL text
-    and the rows returned.
-
-DoneEvent
-    Signals that the turn is complete.  Always the last event in a stream.
-
-ErrorEvent
-    A typed error that occurred during the turn.  The `error_type` field
-    maps to one of the `QueryGraphError` subclass names so callers can
-    branch without catching exceptions.
+Event types:
+    ThinkingEvent: Internal reasoning while the agent is working.
+    AssistantTextEvent: Final natural-language response from the agent.
+    DbResultEvent: SQL query result including the sql text and rows returned.
+    DoneEvent: Always the last event — signals end of turn.
+    ErrorEvent: Typed error mapped to a QueryGraphError subclass name.
 """
 
 from __future__ import annotations

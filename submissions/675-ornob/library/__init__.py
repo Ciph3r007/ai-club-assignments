@@ -1,8 +1,6 @@
-"""QueryGraph Agent - reusable multi-turn conversational query agent.
+"""QueryGraph Agent — reusable multi-turn conversational query agent.
 
-Public API
-----------
-Import the stable symbols from this module::
+Import stable symbols from this package:
 
     from library import (
         # Service contract

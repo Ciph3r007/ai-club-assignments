@@ -13,9 +13,9 @@ from library.api.events import DbResultEvent
 
 
 def format_db_result(event: DbResultEvent) -> str:
-    """Format a `DbResultEvent` as a labelled ASCII table.
+    """Format a DbResultEvent as a labelled ASCII table.
 
-    Produces output like::
+    Output example:
 
         SQL: SELECT * FROM customers LIMIT 5
         Rows returned: 5
@@ -23,10 +23,10 @@ def format_db_result(event: DbResultEvent) -> str:
         customer_id  company_name           contact_name
         -----------  ---------------------  ------------
         1            Alfreds Futterkiste    Maria Anders
-        ...
 
-    Returns a single newline-terminated string.  When there are no rows,
-    returns a short "(no rows returned)" notice instead of a table.
+    Returns:
+        str: A newline-terminated string. When there are no rows, returns
+            a short "(no rows returned)" notice instead of a table.
     """
     lines: list[str] = [
         f"SQL: {event.sql}",

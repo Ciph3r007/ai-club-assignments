@@ -1,19 +1,8 @@
-"""LangGraph agent core for querygraph-agent.
+"""LangGraph agent core — graph factory and concrete AgentService implementation.
 
-Exposes the graph factory and concrete `AgentService` implementation built
-on top of LangGraph's `StateGraph` with `MemorySaver` checkpointing.
-
-Public API
-----------
-`create_graph`
-    Assembles and compiles the LangGraph `StateGraph` for a given set of
-    settings, executor and ownership store.
-
-`GraphAgentService`
-    Concrete `AgentService` implementation that wraps the compiled graph.
-
-`AgentState`
-    The LangGraph state type used by the graph.
+`create_graph` assembles and compiles the StateGraph driven by the tool registry.
+`GraphAgentService` wraps the compiled graph with ownership checks and event conversion.
+`AgentState` is the LangGraph state type carrying messages and sql_retry_count.
 """
 
 from library.agent.graph_factory import GraphAgentService, create_graph
