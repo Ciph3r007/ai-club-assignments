@@ -23,9 +23,8 @@ Event extraction
 ----------------
 ``_extract_events_from_state`` walks the current turn's ``ToolMessage`` objects
 to surface ``DbResultEvent`` instances (serialized as JSON by ``run_sql_node``)
-before appending the final ``AssistantTextEvent``.  Only messages produced
-*after* the last ``HumanMessage`` are considered to avoid surfacing results
-from previous turns.
+before appending the final ``AssistantTextEvent``.  Current-turn scoping is
+delegated to ``library.agent.tracing.current_turn_messages``.
 
 Streaming
 ---------
@@ -57,6 +56,7 @@ from library.agent.nodes import (
     tool_node,
 )
 from library.agent.router import route_after_db_query, route_after_model
+from library.agent.tracing import current_turn_messages
 from library.agent.state import AgentState
 from library.api.events import (
     AgentEvent,
@@ -135,23 +135,6 @@ def create_graph(
 # ---------------------------------------------------------------------------
 
 
-def _current_turn_tool_messages(messages: list[Any]) -> list[ToolMessage]:
-    """Return only ToolMessages produced *after* the last HumanMessage.
-
-    This prevents surfacing DB results from previous turns when the graph
-    state accumulates message history across multiple ``run_turn`` calls.
-    """
-    last_human_idx = -1
-    for i, msg in enumerate(messages):
-        if isinstance(msg, HumanMessage):
-            last_human_idx = i
-    return [
-        msg
-        for msg in messages[last_human_idx + 1 :]
-        if isinstance(msg, ToolMessage)
-    ]
-
-
 def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
     """Convert graph state to an ordered list of ``AgentEvent`` objects.
 
@@ -162,7 +145,7 @@ def _extract_events_from_state(state: dict[str, Any]) -> list[AgentEvent]:
     events: list[AgentEvent] = []
     messages: list[Any] = state.get("messages", [])
 
-    for tool_msg in _current_turn_tool_messages(messages):
+    for tool_msg in (m for m in current_turn_messages(state) if isinstance(m, ToolMessage)):
         try:
             data = json.loads(tool_msg.content)
         except (json.JSONDecodeError, TypeError, ValueError):

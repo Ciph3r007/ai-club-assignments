@@ -170,7 +170,7 @@ async def sql_repair_node(state: AgentState) -> dict[str, Any]:
         if "{n}" not in template
         else template.format(n=retry_count, max=MAX_SQL_RETRIES)
     )
-    return {"messages": [HumanMessage(content=content)]}
+    return {"messages": [HumanMessage(content=content, name="repair")]}
 
 
 __all__ = [
