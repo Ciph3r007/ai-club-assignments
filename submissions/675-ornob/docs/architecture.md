@@ -8,16 +8,17 @@ A chatbot that answers plain-English questions about a database. You ask somethi
 
 ## The Big Picture
 
-```mermaid
-graph LR
-    User["👤 User\n(plain English question)"]
-    Agent["🤖 Agent\n(LangGraph + Ollama)"]
-    DB["🗄️ PostgreSQL\n(Northwind data)"]
-
-    User -- "ask question" --> Agent
-    Agent -- "run SQL" --> DB
-    DB -- "return rows" --> Agent
-    Agent -- "answer in plain English" --> User
+```
+                    ask question
+  User  ─────────────────────────────►  Agent
+                                       (LangGraph
+                                        + Ollama)
+  User  ◄─────────────────────────────
+              answer in plain English      │
+                                           │ run SQL
+                                           ▼
+                                       PostgreSQL
+                                       (Northwind)
 ```
 
 Three technologies power this:
@@ -34,24 +35,45 @@ Three technologies power this:
 
 The agent is not a single function. It is a **graph** — a set of nodes (steps) connected by edges (decisions).
 
-```mermaid
-graph TD
-    A["📥 Receive question"] --> B["🧠 LLM thinks\n(call_model)"]
-    B --> C{What did the LLM decide?}
-    C -- "call think tool" --> D["💭 think\n(reason out loud)"]
-    C -- "call run_sql tool" --> E["🔍 run_sql\n(execute query)"]
-    C -- "call db_schema tool" --> F["📋 db_schema\n(inspect tables)"]
-    C -- "no tool call" --> G["✅ Final answer"]
-    D --> B
-    F --> B
-    E -- "success" --> B
-    E -- "failure" --> H["🔧 sql_repair\n(inject fix prompt)"]
-    H --> B
+```
+                   ┌──────────────────┐
+                   │  Receive question │
+                   └────────┬─────────┘
+                            │
+                            ▼
+                   ┌──────────────────┐
+          ┌────────│   LLM thinks     │◄──────────────────────┐
+          │        └────────┬─────────┘                       │
+          │                 │                                  │
+          │         Which tool did the LLM choose?             │
+          │                 │                                  │
+          │    ┌────────────┼──────────────┐                   │
+          │    ▼            ▼              ▼                   │
+          │ ┌──────┐  ┌──────────┐  ┌───────────┐             │
+          │ │think │  │ run_sql  │  │ db_schema │             │
+          │ └──┬───┘  └────┬─────┘  └─────┬─────┘             │
+          │    │           │              │                    │
+          │    │      success?            │                    │
+          │    │      /      \            │                    │
+          │    │    yes       no          │                    │
+          │    │     │         │          │                    │
+          │    │     │    ┌────────┐      │                    │
+          │    │     │    │sql_    │      │                    │
+          │    │     │    │repair  │──────┼────────────────────┘
+          │    │     │    └────────┘      │
+          │    └─────┴────────────────────┘
+          │           (loop back to LLM)
+          │
+          │  no tool call
+          ▼
+   ┌──────────────┐
+   │ Final answer │
+   └──────────────┘
 ```
 
 Every time the LLM finishes thinking, the graph asks: *"Does the LLM want to use a tool?"*
 - Yes → run the tool, feed result back to LLM
-- No → we're done, return the answer
+- No → we are done, return the answer
 
 ---
 

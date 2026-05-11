@@ -6,41 +6,50 @@ A tool is an **action the LLM can take**. Without tools, the LLM can only produc
 
 When the LLM wants to use a tool, it says *"I want to call X with these arguments."* The graph executes it and feeds the result back — then the LLM decides what to do next.
 
-```mermaid
-sequenceDiagram
-    participant LLM
-    participant Graph
-    participant Tool
-
-    LLM-->>Graph: "call run_sql('SELECT ...')"
-    Graph->>Tool: execute handler
-    Tool-->>Graph: DbResultEvent(rows)
-    Graph->>LLM: here are the results
-    LLM-->>Graph: final answer (no more tools)
+```
+  LLM                  Graph                  Tool
+   |                     |                     |
+   |--"call run_sql"--->  |                     |
+   |    ("SELECT ...")    |---execute handler-> |
+   |                      |                    |
+   |                      |<--DbResultEvent---- |
+   |<--here are results-- |                     |
+   |                      |
+   |--final answer------> (done, no more tools)
 ```
 
 ---
 
 ## The Three Tools
 
-```mermaid
-graph TD
-    LLM["🧠 LLM"] --> T1["💭 think\nReason before acting"]
-    LLM --> T2["🔍 run_sql\nQuery the database"]
-    LLM --> T3["📋 db_schema\nInspect table structure"]
+```
+                     ┌────────┐
+                     │  LLM   │
+                     └───┬────┘
+           ┌─────────────┼─────────────┐
+           ▼             ▼             ▼
+       ┌───────┐   ┌──────────┐  ┌───────────┐
+       │ think │   │ run_sql  │  │ db_schema │
+       │       │   │          │  │           │
+       │Reason │   │ Query    │  │ Inspect   │
+       │before │   │ the      │  │ table     │
+       │acting │   │ database │  │ structure │
+       └───────┘   └──────────┘  └───────────┘
 ```
 
 ---
 
 ### `think` — Reason Before Acting
 
-**Why it exists:** small local models (like Qwen or LLaMA) don't have a built-in reasoning step. Without one, they can jump straight to writing SQL and get it wrong. The `think` tool forces the model to write down its reasoning first.
+**Why it exists:** small local models (like Qwen or LLaMA) do not have a built-in reasoning step. Without one, they can jump straight to writing SQL and get it wrong. The `think` tool forces the model to write down its reasoning first.
 
 **How it works:** the LLM calls `think("I should check the schema before writing the join...")`. The tool echoes it back as a `ThinkingEvent`. No side effects — it is just a named slot to externalise thought.
 
 ```
-think("I need to join orders and order_details...")
-  → ThinkingEvent(content="I need to join orders...")
+  think("I need to join orders and order_details...")
+       │
+       ▼
+  ThinkingEvent(content="I need to join orders and order_details...")
 ```
 
 **In the notebook:** Case 5 shows the raw output. Case 6 proves `think` fires *before* `run_sql`.
@@ -53,19 +62,29 @@ think("I need to join orders and order_details...")
 
 **How it works:** the LLM provides a `SELECT` statement. Before it reaches the database, it passes through a safety guard.
 
-```mermaid
-flowchart LR
-    SQL["LLM writes SQL"] --> Guard["🛡️ Safety Guard\nsql_guard.py"]
-    Guard -- "rejected" --> Error["❌ ErrorEvent\n(never touches DB)"]
-    Guard -- "approved" --> Exec["⚙️ QueryExecutor\n(runs the query)"]
-    Exec -- "success" --> Rows["✅ DbResultEvent\n(rows + count)"]
-    Exec -- "failure" --> Error2["❌ ErrorEvent\n(triggers retry)"]
 ```
-
-**The safety guard checks:**
-- Is it a `SELECT`? (no `DELETE`, `DROP`, `INSERT` allowed)
-- No semicolons? (prevents multi-statement injection)
-- No dangerous keywords? (`TRUNCATE`, `ALTER`, etc.)
+  LLM writes SQL
+       │
+       ▼
+  ┌──────────────────────────────────────┐
+  │ Safety Guard (sql_guard.py)          │
+  │                                      │
+  │  Is it a SELECT?    ── no ──► REJECT │
+  │  No semicolons?     ── no ──► REJECT │
+  │  No DROP/DELETE?    ── no ──► REJECT │
+  └───────────────────┬──────────────────┘
+                      │ all checks pass
+                      ▼
+             QueryExecutor
+             (runs the query)
+                      │
+            ┌─────────┴──────────┐
+          success             failure
+            │                    │
+            ▼                    ▼
+      DbResultEvent          ErrorEvent
+      (rows + count)      (triggers retry)
+```
 
 A rejected query never opens a database connection — it fails fast and safe.
 
@@ -78,8 +97,14 @@ A rejected query never opens a database connection — it fails fast and safe.
 **How it works:** calls `information_schema` and returns formatted metadata. The LLM calls this first, then uses what it learned to write accurate SQL.
 
 ```
-db_schema("orders")
-  → "Table: orders\n  - order_id (integer)\n  - customer_id (varchar)\n  ..."
+  db_schema("orders")
+       │
+       ▼
+  "Table: orders
+     - order_id       (integer)
+     - customer_id    (varchar)
+     - order_date     (date)
+     ..."
 ```
 
 ---
@@ -94,10 +119,17 @@ All tools are registered in one place: `library/registry/builtin_tools.py`. The 
 
 **Adding a new tool requires zero changes to the graph.**
 
-```mermaid
-graph LR
-    Registry["📋 Tool Registry"] -- "tool schemas" --> LLM["🧠 LLM\n(knows what's available)"]
-    Registry -- "nodes + edges" --> Graph["🔀 LangGraph\n(wires itself)"]
+```
+  builtin_tools.py
+  ┌─────────────────────────────┐
+  │ register(think)             │──► LLM sees "think" tool
+  │ register(run_sql)           │──► LLM sees "run_sql" tool
+  │ register(db_schema)         │──► LLM sees "db_schema" tool
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+         LangGraph reads registry
+         and wires all nodes + edges automatically
 ```
 
 ---

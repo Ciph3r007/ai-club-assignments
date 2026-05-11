@@ -16,35 +16,30 @@ The difference from a regular assistant? Every step is logged, every tool call i
 
 ## The Full Journey
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Service
-    participant Graph
-    participant LLM as Ollama LLM
-    participant DB as PostgreSQL
-
-    User->>Service: run_turn("Top 5 customers?")
-    Service->>Service: ownership check (is this user allowed?)
-    Service->>Graph: ainvoke(messages, thread_id)
-
-    Graph->>LLM: full message history
-    LLM-->>Graph: call db_schema tool
-
-    Graph->>DB: query information_schema
-    DB-->>Graph: table/column names
-
-    Graph->>LLM: schema result
-    LLM-->>Graph: call run_sql("SELECT ...")
-
-    Graph->>DB: execute SELECT query
-    DB-->>Graph: rows of data
-
-    Graph->>LLM: query results
-    LLM-->>Graph: final answer text
-
-    Graph-->>Service: updated state
-    Service-->>User: [DbResultEvent, AssistantTextEvent, DoneEvent]
+```
+  User          Service          LLM (Ollama)       PostgreSQL
+   |                |                 |                  |
+   |--"Top 5?"----> |                 |                  |
+   |                |--ownership      |                  |
+   |                |  check          |                  |
+   |                |                 |                  |
+   |                |--invoke-------> |                  |
+   |                |  (full history) |                  |
+   |                |                 |                  |
+   |                |          "call db_schema"          |
+   |                |                 |--schema query--> |
+   |                |                 |<--column names-- |
+   |                |                 |                  |
+   |                |          "call run_sql"            |
+   |                |                 |--SELECT query--> |
+   |                |                 |<--rows---------- |
+   |                |                 |                  |
+   |                |          "Top 5 are: ..."          |
+   |                |<--state---------|                  |
+   |<--events------ |                 |                  |
+   |  [DbResultEvent,                 |                  |
+   |   AssistantTextEvent,            |                  |
+   |   DoneEvent]                     |                  |
 ```
 
 ---
@@ -65,11 +60,17 @@ The LLM receives the full conversation history (every message from every prior t
 
 The graph executes whichever tool the LLM requested, feeds the result back, and the LLM thinks again. This loop repeats until the LLM stops calling tools.
 
-```mermaid
-flowchart LR
-    LLM["🧠 LLM"] -- "wants a tool" --> Tool["🔧 Tool runs"]
-    Tool -- "result back" --> LLM
-    LLM -- "no more tools" --> Done["✅ Answer"]
+```
+  ┌─────┐    wants tool    ┌──────────┐    result    ┌─────┐
+  │ LLM │ ───────────────► │ Tool     │ ────────────► │ LLM │
+  └─────┘                  │ executes │               └──┬──┘
+                           └──────────┘                  │
+                                                 no more tools
+                                                         │
+                                                         ▼
+                                                  ┌─────────────┐
+                                                  │ Final answer│
+                                                  └─────────────┘
 ```
 
 ### Step 4 — Final Answer
@@ -83,17 +84,24 @@ When the LLM produces a response with no tool calls, the graph ends. The service
 There is no special memory module. **The agent remembers because it reads the entire chat history every time.**
 
 ```
-Turn 1:  User: "My name is Alice."
-         Agent: "Hello Alice!"
+  Turn 1
+  ──────
+  User:  "My name is Alice."
+  LLM receives: [ "My name is Alice." ]
+  LLM replies:  "Hello Alice!"
 
-Turn 2:  User: "What is my name?"
-         Agent receives: [Turn 1 messages + Turn 2 message]
-         Agent answers: "Your name is Alice."
+  Turn 2
+  ──────
+  User:  "What is my name?"
+  LLM receives: [ "My name is Alice."   ← still here
+                  "Hello Alice!"
+                  "What is my name?" ]
+  LLM replies:  "Your name is Alice."
 ```
 
 LangGraph stores this history in a `MemorySaver` — a Python dict keyed by `thread_id`. Each new turn appends to the list; the full list goes to the LLM every time.
 
-Different `thread_id` → completely separate conversation, no memory shared.
+Different `thread_id` — completely separate conversation, no memory shared.
 
 ---
 
@@ -101,22 +109,30 @@ Different `thread_id` → completely separate conversation, no memory shared.
 
 If the LLM writes a broken SQL query, the agent does not give up. It tries to fix it automatically.
 
-```mermaid
-flowchart TD
-    SQL["run_sql runs"] --> Q{Success?}
-    Q -- "yes" --> Answer["✅ Continue to answer"]
-    Q -- "no, attempt 1" --> Repair1["🔧 Inject repair prompt"]
-    Repair1 --> Retry1["LLM rewrites SQL"]
-    Retry1 --> Q2{Success?}
-    Q2 -- "yes" --> Answer
-    Q2 -- "no, attempt 2" --> Repair2["🔧 Inject repair prompt"]
-    Repair2 --> Retry2["LLM rewrites SQL"]
-    Retry2 --> Q3{Success?}
-    Q3 -- "yes" --> Answer
-    Q3 -- "no, attempt 3 = max" --> Fail["❌ Tell user query failed"]
+```
+  run_sql(bad query)
+       │
+       ▼
+  FAILED  ──► attempt 1 of 3
+               │
+               ▼
+        "The query failed: <error>.
+         Review and retry."
+               │
+               ▼
+          LLM rewrites SQL
+               │
+               ▼
+          run_sql(new query)
+               │
+         ┌─────┴─────┐
+       success      failed ──► attempt 2 of 3 ──► (same cycle)
+         │
+         ▼
+   continue to answer
 ```
 
-Maximum 3 retries. The repair prompt tells the LLM exactly what failed so it can correct its mistake.
+Maximum 3 retries. After the 3rd failure the agent tells the user the query could not be completed.
 
 ---
 
@@ -138,15 +154,14 @@ The agent does not return a string. It returns a list of typed events:
 
 Instead of waiting for the full answer, `stream_turn` yields tokens one by one as the LLM generates them — useful for displaying a live typing effect in a UI.
 
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant Agent
-
-    Caller->>Agent: stream_turn(session, message)
-    Agent-->>Caller: AssistantTextEvent("Top")
-    Agent-->>Caller: AssistantTextEvent(" 5")
-    Agent-->>Caller: AssistantTextEvent(" customers")
-    Agent-->>Caller: AssistantTextEvent(" are...")
-    Agent-->>Caller: DoneEvent
+```
+  Caller                           Agent
+    |                                |
+    |---stream_turn(session, msg)--> |
+    |                                |
+    | <--AssistantTextEvent("Top")-- |
+    | <--AssistantTextEvent(" 5")--- |
+    | <--AssistantTextEvent(" are")- |
+    | <--AssistantTextEvent("...")-- |
+    | <--DoneEvent------------------ |
 ```
