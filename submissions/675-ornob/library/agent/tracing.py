@@ -7,6 +7,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from library.agent.router import REPAIR_TURN_NAME
+
 
 def current_turn_messages(state: dict[str, Any]) -> list[Any]:
     """Return messages produced in the current turn.
@@ -23,7 +25,7 @@ def current_turn_messages(state: dict[str, Any]) -> list[Any]:
         (
             i
             for i, m in enumerate(msgs)
-            if isinstance(m, HumanMessage) and getattr(m, "name", None) != "repair"
+            if isinstance(m, HumanMessage) and getattr(m, "name", None) != REPAIR_TURN_NAME
         ),
         default=-1,
     )

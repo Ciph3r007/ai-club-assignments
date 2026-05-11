@@ -22,7 +22,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from library.agent.router import MAX_SQL_RETRIES
+from library.agent.router import MAX_SQL_RETRIES, REPAIR_TURN_NAME
 from library.agent.state import AgentState
 from library.db.query_executor import QueryExecutor
 from library.registry.tool_registry import ToolRegistry, tool_registry
@@ -102,15 +102,41 @@ def _try_parse_tool_call_from_text(content: str) -> list[dict[str, Any]] | None:
 # SQL repair message dispatch
 # ---------------------------------------------------------------------------
 
-_REPAIR_MESSAGES: dict[bool, str] = {
-    True: "All SQL retry attempts have been exhausted. Please explain the issue clearly to the user and suggest next steps.",
-    False: "[SQL repair - attempt {n}/{max}] The previous SQL query failed. Review the error above, use the db_schema tool if you need to verify column names or types, then retry with a corrected SQL query.",
+_REPAIR_MESSAGES: dict[bool, Callable[[int, int], str]] = {
+    False: lambda n, max_: (
+        f"[SQL repair - attempt {n}/{max_}] The previous SQL query failed. "
+        "Review the error above, use the db_schema tool if you need to verify "
+        "column names or types, then retry with a corrected SQL query."
+    ),
+    True: lambda _n, _max: (
+        "All SQL retry attempts have been exhausted. Please explain the issue "
+        "clearly to the user and suggest next steps."
+    ),
+}
+
+_NEXT_RETRY_COUNT: dict[str, Callable[[int], int]] = {
+    "error": lambda n: n + 1,
+}
+
+_RETRY_COUNT_UPDATES: dict[bool, Callable[[int, str], dict[str, Any]]] = {
+    True: lambda current, event_type: {
+        "sql_retry_count": _NEXT_RETRY_COUNT.get(event_type, lambda _: 0)(current)
+    },
+    False: lambda _c, _e: {},
 }
 
 
 # ---------------------------------------------------------------------------
 # Nodes
 # ---------------------------------------------------------------------------
+
+
+def _repair_ollama_response(response: Any) -> Any:
+    """Return a repaired AIMessage if Ollama embedded tool-call JSON in response text."""
+    if getattr(response, "tool_calls", None) or not isinstance(response.content, str):
+        return response
+    parsed = _try_parse_tool_call_from_text(response.content)
+    return AIMessage(content="", tool_calls=parsed) if parsed else response
 
 
 async def call_model_node(
@@ -121,13 +147,7 @@ async def call_model_node(
     """Invoke the LLM; inject system prompt; apply Ollama fallback parser."""
     messages = [SystemMessage(content=system_prompt), *state["messages"]]
     response = await model.ainvoke(messages)
-
-    if not getattr(response, "tool_calls", None) and isinstance(response.content, str):
-        parsed = _try_parse_tool_call_from_text(response.content)
-        if parsed:
-            response = AIMessage(content="", tool_calls=parsed)
-
-    return {"messages": [response]}
+    return {"messages": [_repair_ollama_response(response)]}
 
 
 async def tool_node(
@@ -153,24 +173,16 @@ async def tool_node(
     tool_msg = ToolMessage(content=_to_tool_content(event), tool_call_id=tool_call["id"])
 
     reg = _registry.get(tool_name)
-    if reg.has_retry:
-        current: int = state.get("sql_retry_count", 0)  # type: ignore[assignment]
-        new_count = (current + 1) if event.type == "error" else 0
-        return {"messages": [tool_msg], "sql_retry_count": new_count}
-
-    return {"messages": [tool_msg]}
+    current: int = state.get("sql_retry_count", 0)  # type: ignore[assignment]
+    extra = _RETRY_COUNT_UPDATES[reg.has_retry](current, event.type)
+    return {"messages": [tool_msg], **extra}
 
 
 async def sql_repair_node(state: AgentState) -> dict[str, Any]:
     """Inject a targeted repair prompt so the LLM can self-correct failed SQL."""
     retry_count: int = state.get("sql_retry_count", 0)  # type: ignore[assignment]
-    template = _REPAIR_MESSAGES[retry_count > MAX_SQL_RETRIES]
-    content = (
-        template
-        if "{n}" not in template
-        else template.format(n=retry_count, max=MAX_SQL_RETRIES)
-    )
-    return {"messages": [HumanMessage(content=content, name="repair")]}
+    content = _REPAIR_MESSAGES[retry_count > MAX_SQL_RETRIES](retry_count, MAX_SQL_RETRIES)
+    return {"messages": [HumanMessage(content=content, name=REPAIR_TURN_NAME)]}
 
 
 __all__ = [

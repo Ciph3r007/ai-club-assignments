@@ -16,6 +16,12 @@ from library.agent.state import AgentState
 
 # Maximum consecutive SQL repair attempts before the LLM is asked to give up.
 MAX_SQL_RETRIES: int = 3
+REPAIR_TURN_NAME: str = "repair"
+
+_QUERY_ROUTE: dict[bool, Literal["sql_repair_node", "call_model"]] = {
+    True: "sql_repair_node",
+    False: "call_model",
+}
 
 
 def route_after_model(state: AgentState) -> str:
@@ -43,9 +49,7 @@ def route_after_db_query(
     failed.
     """
     retry_count: int = state.get("sql_retry_count", 0)  # type: ignore[assignment]
-    if 0 < retry_count <= MAX_SQL_RETRIES:
-        return "sql_repair_node"
-    return "call_model"
+    return _QUERY_ROUTE[0 < retry_count <= MAX_SQL_RETRIES]
 
 
-__all__ = ["MAX_SQL_RETRIES", "route_after_db_query", "route_after_model"]
+__all__ = ["MAX_SQL_RETRIES", "REPAIR_TURN_NAME", "route_after_db_query", "route_after_model"]

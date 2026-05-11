@@ -17,7 +17,7 @@ instead of waiting for the full response.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from functools import partial
 from typing import Any
 
@@ -52,6 +52,12 @@ from library.db.query_executor import QueryExecutor
 from library.model.ollama_client import OllamaClient
 from library.registry.tool_registry import tool_registry
 from library.session.ownership import OwnershipStore
+
+
+_EDGE_ADDERS: dict[bool, Callable[..., None]] = {
+    True: lambda b, reg: b.add_conditional_edges(reg.node_name, route_after_db_query),
+    False: lambda b, reg: b.add_edge(reg.node_name, "call_model"),
+}
 
 
 def create_graph(
@@ -92,10 +98,7 @@ def create_graph(
             reg.node_name,
             partial(tool_node, executor=executor, tool_name=reg.name),
         )
-        if reg.has_retry:
-            builder.add_conditional_edges(reg.node_name, route_after_db_query)
-        else:
-            builder.add_edge(reg.node_name, "call_model")
+        _EDGE_ADDERS[reg.has_retry](builder, reg)
 
     builder.set_entry_point("call_model")
     builder.add_conditional_edges("call_model", route_after_model)

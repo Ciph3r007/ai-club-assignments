@@ -9,10 +9,12 @@ Connection errors are wrapped in `QueryGraphError` with a user-safe message.
 from __future__ import annotations
 
 import asyncio
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from library.config.settings import Settings
@@ -67,6 +69,46 @@ class SchemaInfo:
         if not self.tables:
             return "(no tables found)"
         return "\n\n".join(str(t) for t in self.tables)
+
+
+_SYSTEM_SCHEMAS: tuple[str, ...] = (
+    "information_schema",
+    "pg_catalog",
+    "pg_toast",
+    "pg_toast_temp_0",
+)
+
+_LIMIT_RE = re.compile(r"\bLIMIT\b", re.IGNORECASE)
+
+_LIMIT_STRATEGIES: dict[bool, Callable[[str, int], str]] = {
+    True: lambda sql, _: sql,
+    False: lambda sql, cap: f"{sql} LIMIT {cap}",
+}
+
+_SCHEMA_QUERY_FILTERED = """
+    SELECT table_schema, table_name, column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_name = :table_name
+      AND table_schema NOT IN :schemas
+    ORDER BY table_schema, table_name, ordinal_position
+"""
+
+_SCHEMA_QUERY_ALL = """
+    SELECT table_schema, table_name, column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema NOT IN :schemas
+    ORDER BY table_schema, table_name, ordinal_position
+"""
+
+_SCHEMA_QUERIES: dict[bool, str] = {
+    True: _SCHEMA_QUERY_FILTERED,
+    False: _SCHEMA_QUERY_ALL,
+}
+
+_SCHEMA_PARAMS: dict[bool, Callable[[str | None], dict[str, Any]]] = {
+    True: lambda t: {"table_name": t, "schemas": list(_SYSTEM_SCHEMAS)},
+    False: lambda _: {"schemas": list(_SYSTEM_SCHEMAS)},
+}
 
 
 class QueryExecutor:
@@ -152,44 +194,16 @@ class QueryExecutor:
 
     def _apply_limit(self, sql: str) -> str:
         """Append a LIMIT clause if the statement doesn't already have one."""
-        upper = sql.upper()
-        if "LIMIT" not in upper:
-            return f"{sql} LIMIT {self._settings.db_max_rows}"
-        return sql
+        return _LIMIT_STRATEGIES[bool(_LIMIT_RE.search(sql))](sql, self._settings.db_max_rows)
 
     def _run_schema_sync(self, table_name: str | None) -> SchemaInfo:
         """Query `information_schema.columns` synchronously.
 
         Intended to be called via `asyncio.to_thread`.
-
-        System schemas are excluded via a literal IN list - SQLAlchemy's
-        `text()` does not expand Python tuples for parametrised IN clauses,
-        so binding them as a parameter would cause a PostgreSQL syntax error.
         """
-        _EXCLUDE = (
-            "'information_schema', 'pg_catalog', 'pg_toast', 'pg_toast_temp_0'"
-        )
-        if table_name:
-            stmt = text(
-                f"""
-                SELECT table_schema, table_name, column_name, data_type, is_nullable
-                FROM information_schema.columns
-                WHERE table_name = :table_name
-                  AND table_schema NOT IN ({_EXCLUDE})
-                ORDER BY table_schema, table_name, ordinal_position
-                """
-            )
-            params: dict[str, Any] = {"table_name": table_name}
-        else:
-            stmt = text(
-                f"""
-                SELECT table_schema, table_name, column_name, data_type, is_nullable
-                FROM information_schema.columns
-                WHERE table_schema NOT IN ({_EXCLUDE})
-                ORDER BY table_schema, table_name, ordinal_position
-                """
-            )
-            params = {}
+        filtered = table_name is not None
+        stmt = text(_SCHEMA_QUERIES[filtered]).bindparams(bindparam("schemas", expanding=True))
+        params = _SCHEMA_PARAMS[filtered](table_name)
 
         with self._engine.connect() as conn:
             rows = conn.execute(stmt, params).fetchall()
@@ -197,9 +211,7 @@ class QueryExecutor:
         tables: dict[tuple[str, str], list[ColumnInfo]] = {}
         for row in rows:
             key = (row.table_schema, row.table_name)
-            if key not in tables:
-                tables[key] = []
-            tables[key].append(
+            tables.setdefault(key, []).append(
                 ColumnInfo(
                     name=row.column_name,
                     data_type=row.data_type,
