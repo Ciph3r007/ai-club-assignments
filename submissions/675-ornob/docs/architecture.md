@@ -1,158 +1,100 @@
 # Architecture
 
-## What It Is
+## What Is This?
 
-A multi-turn conversational agent that answers questions about a PostgreSQL database (Northwind). The user asks
-questions in plain English; the agent writes and executes SQL, reasons step by step, and remembers prior turns in the
-same conversation.
+A chatbot that answers plain-English questions about a database. You ask something like *"Who are the top 5 customers?"* and the agent figures out the SQL, runs it, and gives you a human-readable answer.
 
-Built on **LangGraph** (graph-based agent orchestration), **Ollama** (local LLM), and **PostgreSQL** (via SQLAlchemy).
+---
+
+## The Big Picture
+
+```mermaid
+graph LR
+    User["👤 User\n(plain English question)"]
+    Agent["🤖 Agent\n(LangGraph + Ollama)"]
+    DB["🗄️ PostgreSQL\n(Northwind data)"]
+
+    User -- "ask question" --> Agent
+    Agent -- "run SQL" --> DB
+    DB -- "return rows" --> Agent
+    Agent -- "answer in plain English" --> User
+```
+
+Three technologies power this:
+
+| Technology | Role |
+|---|---|
+| **Ollama** | The local LLM — reads your question, writes SQL, produces the final answer |
+| **LangGraph** | Manages the workflow — decides what to do next at each step |
+| **PostgreSQL** | Stores the Northwind sample data the agent queries |
+
+---
+
+## How the Agent Is Structured
+
+The agent is not a single function. It is a **graph** — a set of nodes (steps) connected by edges (decisions).
+
+```mermaid
+graph TD
+    A["📥 Receive question"] --> B["🧠 LLM thinks\n(call_model)"]
+    B --> C{What did the LLM decide?}
+    C -- "call think tool" --> D["💭 think\n(reason out loud)"]
+    C -- "call run_sql tool" --> E["🔍 run_sql\n(execute query)"]
+    C -- "call db_schema tool" --> F["📋 db_schema\n(inspect tables)"]
+    C -- "no tool call" --> G["✅ Final answer"]
+    D --> B
+    F --> B
+    E -- "success" --> B
+    E -- "failure" --> H["🔧 sql_repair\n(inject fix prompt)"]
+    H --> B
+```
+
+Every time the LLM finishes thinking, the graph asks: *"Does the LLM want to use a tool?"*
+- Yes → run the tool, feed result back to LLM
+- No → we're done, return the answer
 
 ---
 
 ## Assignment Requirements — Where Each Is Met
 
-| Requirement                       | Where                                                                    |
-|-----------------------------------|--------------------------------------------------------------------------|
-| LangGraph ReAct agent             | `library/agent/graph_factory.py` — `create_graph()`                      |
-| `run_sql` tool                    | `library/tools/db_query.py` — `RunSqlHandler`                            |
-| `think` tool                      | `library/tools/think.py` — `ThinkHandler`                                |
-| `MemorySaver()` checkpointer      | `graph_factory.py` line: `MemorySaver()` passed to `builder.compile()`   |
-| Multi-turn memory within a thread | `AgentState.messages` + `add_messages` reducer + `MemorySaver`           |
-| `think → run_sql` trace           | Notebook Case 6; verified by `current_turn_tool_call_names`              |
-| Database seeded with data         | Northwind PostgreSQL, loaded via `Dockerfile.postgres` + `northwind.sql` |
-| Notebook readable end-to-end      | `week-01/week-01.ipynb` — Cases 1–7 with annotated markdown              |
+| Requirement | Where |
+|---|---|
+| LangGraph ReAct agent | `library/agent/graph_factory.py` |
+| `run_sql` tool | `library/tools/db_query.py` |
+| `think` tool | `library/tools/think.py` |
+| Multi-turn memory (`MemorySaver`) | `graph_factory.py` — passed to `builder.compile()` |
+| `think → run_sql` ordering trace | Notebook Case 6, verified by `tracing.py` |
+| Northwind database | `Dockerfile.postgres` + `northwind.sql` |
+| Readable notebook | `week-01/week-01.ipynb` — Cases 1–7 |
 
 ---
 
-## Component Diagram
+## Code Layout
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Notebook / Caller                    │
-└────────────────────────────┬────────────────────────────┘
-                             │ run_turn(session, message)
-                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                  GraphAgentService                      │
-│  - Ownership check (InMemoryOwnershipStore)             │
-│  - Calls graph.ainvoke()                                │
-│  - Converts state → AgentEvent list                     │
-└────────────────────────────┬────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────┐
-│              LangGraph StateGraph (compiled)            │
-│                                                         │
-│   ┌─────────────┐    ┌──────────────┐    ┌──────────┐   │
-│   │ call_model  │───▶│  tool nodes  │───▶│sql_repair│   │
-│   │  (Ollama)   │◀───│  (think /    │    │  _node   │   │
-│   └─────────────┘    │  run_sql /   │    └──────────┘   │
-│                      │  db_schema)  │                   │
-│                      └──────────────┘                   │
-│                                                         │
-│   State: { messages: [...], sql_retry_count: int }      │
-│   Checkpointer: MemorySaver (keyed by thread_id)        │
-└────────────────────────────┬────────────────────────────┘
-                             │
-                  ┌──────────┼──────────┐
-                  ▼          ▼          ▼
-            ┌─────────┐ ┌────────┐ ┌──────────┐
-            │ Ollama  │ │sql_    │ │QueryExec │
-            │  LLM    │ │guard   │ │  utor    │
-            └─────────┘ └────────┘ └──────────┘
-                                        │
-                                        ▼
-                                  ┌────────────┐
-                                  │ PostgreSQL │
-                                  │ (Northwind)│
-                                  └────────────┘
+library/
+├── agent/          → graph, nodes, routing logic, memory
+├── tools/          → think, run_sql, db_schema handlers
+├── db/             → SQL safety guard + query executor
+├── registry/       → tool registration (the graph reads this)
+├── api/            → public types: events, service interface
+├── model/          → Ollama client with fallback
+├── session/        → ownership check (who owns which thread)
+└── config/         → settings read from .env
 ```
-
----
-
-## Layer Breakdown
-
-### `api/`
-
-The public contract. Nothing outside `library/` depends on internals.
-
-- **`events.py`** — typed event objects the agent returns. Every response is one or more of:
-    - `ThinkingEvent` — the model's chain-of-thought (from `think` tool)
-    - `DbResultEvent` — SQL result rows
-    - `AssistantTextEvent` — final natural language answer
-    - `ErrorEvent` — guard rejection, DB failure, or ownership violation
-    - `DoneEvent` — always last, signals end of response
-- **`service.py`** — abstract `AgentService` base class + `SessionContext(thread_id, user_id)`
-
-### `agent/`
-
-The graph and its internals.
-
-- **`state.py`** — `AgentState` extends LangGraph's `MessagesState`. Adds `sql_retry_count` to track consecutive SQL
-  failures.
-- **`graph_factory.py`** — builds and compiles the `StateGraph`; contains `GraphAgentService` (the concrete service).
-- **`nodes.py`** — three node functions: `call_model_node`, `tool_node` (generic), `sql_repair_node`.
-- **`router.py`** — two routing functions: `route_after_model` (which tool to call) and `route_after_db_query` (retry or
-  continue).
-- **`tracing.py`** — utilities for inspecting which tools were called in the current turn.
-
-### `tools/`
-
-One file per tool. Each tool has a handler, a schema, and is registered in `registry/`.
-
-- **`think.py`** — echoes the thought back. No side effects.
-- **`db_query.py`** — validates SQL, executes it, returns rows or error.
-- **`db_schema.py`** — queries `information_schema` and returns table/column metadata.
-
-### `db/`
-
-Everything that touches the database.
-
-- **`sql_guard.py`** — pipeline of `SqlValidationRule` objects. Rejects non-SELECT statements, semicolons (
-  multi-statement injection), and destructive keywords. Runs synchronously before any connection is opened.
-- **`query_executor.py`** — opens a connection, sets `statement_timeout`, applies a row cap, returns `QueryResult`.
-
-### `registry/`
-
-Central tool registration. The graph reads tool schemas and routing info entirely from the registry — adding a tool
-requires no changes to the graph.
-
-- **`tool_registry.py`** — `ToolRegistry` holds `ToolRegistration` objects (name, handler, schema, node name,
-  `has_retry` flag).
-- **`builtin_tools.py`** — registers `think`, `run_sql`, `db_schema` at import time.
-
-### `model/`
-
-- **`ollama_client.py`** — wraps `ChatOllama`. On tool-call failure, falls back to the next model in
-  `ollama_fallback_models`. Binds tool schemas from the registry.
-
-### `session/`
-
-- **`ownership.py`** — `InMemoryOwnershipStore` records `thread_id → user_id`. First caller claims the thread;
-  subsequent callers with a different `user_id` get `OwnershipError` immediately.
-
-### `config/`
-
-- **`settings.py`** — Pydantic-Settings reads `.env`. Exposes DB URL, Ollama model, row cap, timeout, log level, and
-  system prompt as typed fields.
 
 ---
 
 ## Key Design Decisions
 
-**Why a `ToolRegistry`?**
-The graph wires nodes and edges by reading the registry at build time. Adding a new tool means one
-`tool_registry.register(...)` call — the graph, router, and LLM tool-binding all update automatically.
+**Why a graph instead of a simple loop?**
+LangGraph makes the control flow explicit and inspectable. Each node is a named step; each edge is a visible decision. Adding a new tool means adding one entry to the registry — the graph wires itself.
 
-**Why typed events instead of strings?**
-Callers (notebook, web API, tests) can pattern-match on `event.type` without parsing strings. The `DbResultEvent`
-carries structured rows; the notebook's formatter and a future REST endpoint can both consume the same object.
+**Why typed events instead of raw strings?**
+The agent returns structured objects (`ThinkingEvent`, `DbResultEvent`, `AssistantTextEvent`). Callers can pattern-match on `event.type` without parsing text, and a future web UI can consume the same objects as the notebook.
 
-**Why `sql_guard` runs before the DB connection?**
-A rejected query never opens a connection, never counts against the pool, and never touches the database. Fast-fail at
-the validation layer.
+**Why validate SQL before opening a database connection?**
+The safety guard (`sql_guard`) rejects dangerous queries synchronously, before any connection is opened. A blocked query never touches the database — fast and safe.
 
-**Why `MemorySaver` and not `SqliteSaver`?**
-Assignment constraint: in-process memory only. `MemorySaver` stores the full `messages` list for each `thread_id` in a
-Python dict. It resets when the kernel restarts — no persistence, no leakage across sessions.
+**Why in-memory checkpointing (`MemorySaver`)?**
+Assignment constraint: no external persistence. `MemorySaver` keeps all conversation history in a Python dict. It resets when the kernel restarts — simple, zero-config, no leakage.

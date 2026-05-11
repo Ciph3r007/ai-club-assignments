@@ -1,180 +1,152 @@
 # Request Flow
 
-How a single user message travels through the system from caller to response.
+## What Happens When You Ask a Question?
+
+Think of the agent like a smart research assistant:
+
+1. You ask a question in plain English
+2. The assistant checks the database structure so it knows what tables exist
+3. It writes a SQL query
+4. It runs the query
+5. It reads the results and answers you in plain English
+
+The difference from a regular assistant? Every step is logged, every tool call is tracked, and if the SQL fails, it automatically tries to fix it.
 
 ---
 
-## Entry Point
+## The Full Journey
 
-```python
-events = await service.run_turn(session, "Top 5 customers by order value?")
-```
+```mermaid
+sequenceDiagram
+    participant User
+    participant Service
+    participant Graph
+    participant LLM as Ollama LLM
+    participant DB as PostgreSQL
 
-`GraphAgentService.run_turn` does three things before touching the graph:
+    User->>Service: run_turn("Top 5 customers?")
+    Service->>Service: ownership check (is this user allowed?)
+    Service->>Graph: ainvoke(messages, thread_id)
 
-1. **Ownership check** — `InMemoryOwnershipStore` verifies `session.user_id` owns `session.thread_id`. If not, returns
-   `ErrorEvent(OwnershipError)` immediately.
-2. **Invokes the graph** — calls `graph.ainvoke({"messages": [HumanMessage(...)], "sql_retry_count": 0}, config)` with
-   the `thread_id` as the checkpoint key.
-3. **Extracts events** — walks the returned state and converts `ToolMessage` and `AIMessage` objects into typed
-   `AgentEvent` objects.
+    Graph->>LLM: full message history
+    LLM-->>Graph: call db_schema tool
 
----
+    Graph->>DB: query information_schema
+    DB-->>Graph: table/column names
 
-## Graph Execution
+    Graph->>LLM: schema result
+    LLM-->>Graph: call run_sql("SELECT ...")
 
-The graph is a `StateGraph` compiled from these nodes and edges:
+    Graph->>DB: execute SELECT query
+    DB-->>Graph: rows of data
 
-```
-                    ┌───────────────┐
-                    │  call_model   │ ◀──────────────────┐
-                    │   (Ollama)    │                     │
-                    └──────┬────────┘                     │
-                           │                              │
-                    route_after_model                     │
-                    (reads last AIMessage's tool_calls)   │
-                           │                              │
-          ┌────────────────┼────────────────┐             │
-          ▼                ▼                ▼             │
-    ┌──────────┐    ┌──────────┐    ┌────────────┐        │
-    │think_node│    │run_sql_  │    │db_schema_  │        │
-    │          │    │node      │    │node        │        │
-    └────┬─────┘    └────┬─────┘    └─────┬──────┘        │
-         │              │                 │               │
-      (no retry)   route_after_db_query  (no retry)      │
-         │              │                 │               │
-         │         ┌────┴────┐            │               │
-         │         ▼         ▼            │               │
-         │   ┌──────────┐  call_model ────┘               │
-         │   │sql_repair│                                 │
-         │   │_node     │─────────────────────────────────┘
-         │   └──────────┘
-         │
-         └──────────────────────────────────────────────▶ call_model ──▶ __end__
-```
+    Graph->>LLM: query results
+    LLM-->>Graph: final answer text
 
-### Step by step for a SQL question
-
-| Step | What happens                                                                                                                                                                                                                           |
-|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1    | `call_model` invokes Ollama with `SystemMessage + full message history`. Model decides to call `db_schema`.                                                                                                                            |
-| 2    | `route_after_model` reads `AIMessage.tool_calls[0].name` → routes to `db_schema_node`.                                                                                                                                                 |
-| 3    | `db_schema_node` queries `information_schema`, returns a `ToolMessage` with column metadata.                                                                                                                                           |
-| 4    | `route_after_model` routes to `call_model` (no tool call pending).                                                                                                                                                                     |
-| 5    | `call_model` invokes Ollama again. Now the model has schema context. It calls `run_sql` with a `SELECT` query.                                                                                                                         |
-| 6    | `route_after_model` → `run_sql_node`.                                                                                                                                                                                                  |
-| 7    | `run_sql_node` runs `sql_guard.validate_sql` (sync). If it passes, `QueryExecutor.execute` runs the query. Returns `DbResultEvent` (success) or `ErrorEvent` (failure). `sql_retry_count` increments on error, resets to 0 on success. |
-| 8    | `route_after_db_query`: if `0 < retry_count ≤ 3` → `sql_repair_node`; else → `call_model`.                                                                                                                                             |
-| 9    | `call_model` reads the result rows and writes the final answer. No more tool calls → `__end__`.                                                                                                                                        |
-
----
-
-## State
-
-`AgentState` carries two fields:
-
-```python
-class AgentState(MessagesState):
-    sql_retry_count: int
-```
-
-`MessagesState` gives `messages: Annotated[list[BaseMessage], add_messages]`.
-
-**`add_messages` reducer:** every node returns `{"messages": [new_message]}`. LangGraph *appends* rather than replaces.
-After a full conversation the list looks like:
-
-```
-HumanMessage("My name is Alice")        ← Turn 1 input
-AIMessage("Hello Alice!")               ← Turn 1 output
-HumanMessage("Top 5 customers?")        ← Turn 2 input
-AIMessage(tool_calls=[db_schema])
-ToolMessage(schema_text)
-AIMessage(tool_calls=[run_sql])
-ToolMessage(db_result_json)
-AIMessage("Top 5 are: ...")             ← Turn 2 output
-```
-
-This full list is replayed to the model on every `call_model` invocation — that is how memory works.
-
----
-
-## The SQL Retry Cycle
-
-When `run_sql` fails, the graph does not give up immediately:
-
-```
-run_sql_node (error) → sql_retry_count = 1
-    ↓
-route_after_db_query: 0 < 1 ≤ 3 → sql_repair_node
-    ↓
-sql_repair_node injects:
-  HumanMessage("[SQL repair - attempt 1/3] The previous SQL query failed.
-               Review the error above and retry with a corrected query.",
-               name="repair")
-    ↓
-call_model sees the error + repair prompt → retries run_sql
-    ↓
-run_sql_node (success) → sql_retry_count = 0
-    ↓
-route_after_db_query: 0 < 0 is False → call_model → final answer
-```
-
-Maximum 3 retries (`MAX_SQL_RETRIES = 3` in `router.py`). After the 4th failure, `retry_count = 4 > 3`, so
-`route_after_db_query` routes to `call_model` which tells the user the query could not be completed.
-
-Repair `HumanMessage` objects are tagged `name="repair"` so that `current_turn_messages` in `tracing.py` skips them when
-finding the turn boundary — otherwise tool calls before the first retry (like `think`) would be invisible to the tracer.
-
----
-
-## Multi-Turn Memory
-
-**How it works:**
-
-`MemorySaver` stores the full `AgentState` (including all `messages`) in a Python dict keyed by `thread_id`. When
-`run_turn` is called again on the same `thread_id`:
-
-1. LangGraph loads the checkpoint for that `thread_id`.
-2. The new `HumanMessage` is appended via `add_messages`.
-3. The graph runs with the full accumulated history.
-4. The updated state is saved back to `MemorySaver`.
-
-The model "remembers" because it literally receives every prior message in its context window.
-
-**Thread isolation:** different `thread_id` values are separate checkpoint keys. Starting a new thread gives the model
-no memory of any previous thread.
-
-**Assignment requirement met (Case 1 in notebook):**
-
-```
-Turn 1: "My name is Alice."  → model responds
-Turn 2: "What is my name?"   → model answers "Alice" from checkpoint history
+    Graph-->>Service: updated state
+    Service-->>User: [DbResultEvent, AssistantTextEvent, DoneEvent]
 ```
 
 ---
 
-## Event Extraction
+## Step-by-Step Walkthrough
 
-After `ainvoke` returns, `_extract_events_from_state` converts the raw state into `AgentEvent` objects:
+### Step 1 — Ownership Check
 
-1. Calls `current_turn_messages(state)` to get only messages from the current turn (after the last user `HumanMessage`).
-2. For each `ToolMessage` in that slice: tries `json.loads(content)`. If `type == "db_result"` → appends
-   `DbResultEvent`.
-3. Reads the last `AIMessage` for the final text → appends `AssistantTextEvent`.
-4. Always appends `DoneEvent` last.
+Before anything runs, the service checks: *"Does this user own this conversation thread?"*
+
+The first user to use a `thread_id` claims it. Anyone else gets an error immediately — the LLM never even sees the message.
+
+### Step 2 — LLM Thinks
+
+The LLM receives the full conversation history (every message from every prior turn). It decides what to do next — usually inspect the schema first, then write SQL.
+
+### Step 3 — Tools Run
+
+The graph executes whichever tool the LLM requested, feeds the result back, and the LLM thinks again. This loop repeats until the LLM stops calling tools.
+
+```mermaid
+flowchart LR
+    LLM["🧠 LLM"] -- "wants a tool" --> Tool["🔧 Tool runs"]
+    Tool -- "result back" --> LLM
+    LLM -- "no more tools" --> Done["✅ Answer"]
+```
+
+### Step 4 — Final Answer
+
+When the LLM produces a response with no tool calls, the graph ends. The service converts the raw state into typed event objects and returns them.
+
+---
+
+## Memory: How the Agent Remembers You
+
+There is no special memory module. **The agent remembers because it reads the entire chat history every time.**
+
+```
+Turn 1:  User: "My name is Alice."
+         Agent: "Hello Alice!"
+
+Turn 2:  User: "What is my name?"
+         Agent receives: [Turn 1 messages + Turn 2 message]
+         Agent answers: "Your name is Alice."
+```
+
+LangGraph stores this history in a `MemorySaver` — a Python dict keyed by `thread_id`. Each new turn appends to the list; the full list goes to the LLM every time.
+
+Different `thread_id` → completely separate conversation, no memory shared.
+
+---
+
+## SQL Retry: Self-Healing Queries
+
+If the LLM writes a broken SQL query, the agent does not give up. It tries to fix it automatically.
+
+```mermaid
+flowchart TD
+    SQL["run_sql runs"] --> Q{Success?}
+    Q -- "yes" --> Answer["✅ Continue to answer"]
+    Q -- "no, attempt 1" --> Repair1["🔧 Inject repair prompt"]
+    Repair1 --> Retry1["LLM rewrites SQL"]
+    Retry1 --> Q2{Success?}
+    Q2 -- "yes" --> Answer
+    Q2 -- "no, attempt 2" --> Repair2["🔧 Inject repair prompt"]
+    Repair2 --> Retry2["LLM rewrites SQL"]
+    Retry2 --> Q3{Success?}
+    Q3 -- "yes" --> Answer
+    Q3 -- "no, attempt 3 = max" --> Fail["❌ Tell user query failed"]
+```
+
+Maximum 3 retries. The repair prompt tells the LLM exactly what failed so it can correct its mistake.
+
+---
+
+## What the Service Returns
+
+The agent does not return a string. It returns a list of typed events:
+
+| Event | What it contains |
+|---|---|
+| `ThinkingEvent` | The LLM's chain-of-thought from the `think` tool |
+| `DbResultEvent` | The SQL that ran + the rows returned |
+| `AssistantTextEvent` | The final plain-English answer |
+| `ErrorEvent` | What went wrong (guard rejection, DB failure, ownership violation) |
+| `DoneEvent` | Always last — signals the response is complete |
 
 ---
 
 ## Streaming
 
-`stream_turn` uses `astream_events(version="v2")` instead of `ainvoke`. It yields `AssistantTextEvent` objects one token
-at a time by filtering `on_chat_model_stream` events. Tool-call construction chunks are silently dropped — only visible
-prose reaches the caller.
+Instead of waiting for the full answer, `stream_turn` yields tokens one by one as the LLM generates them — useful for displaying a live typing effect in a UI.
 
----
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Agent
 
-## Ollama Fallback
-
-`OllamaClient` tries the primary model first. If the model returns a response with no tool calls but the text looks like
-a JSON tool call, the fallback parser (`_try_parse_tool_call_from_text` in `nodes.py`) extracts it. If the primary model
-fails entirely, the client retries with each model in `ollama_fallback_models` from `.env`.
+    Caller->>Agent: stream_turn(session, message)
+    Agent-->>Caller: AssistantTextEvent("Top")
+    Agent-->>Caller: AssistantTextEvent(" 5")
+    Agent-->>Caller: AssistantTextEvent(" customers")
+    Agent-->>Caller: AssistantTextEvent(" are...")
+    Agent-->>Caller: DoneEvent
+```
