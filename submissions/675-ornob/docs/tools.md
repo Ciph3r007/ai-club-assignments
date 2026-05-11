@@ -2,16 +2,18 @@
 
 ## What Is a Tool?
 
-A tool is an **action the LLM can take**. Without tools, the LLM can only produce text. With tools, it can look things up, run queries, and interact with the real world.
+A tool is an **action the LLM can take**. Without tools, the LLM can only produce text. With tools, it can look things
+up, run queries, and interact with the real world.
 
-When the LLM wants to use a tool, it says *"I want to call X with these arguments."* The graph executes it and feeds the result back — then the LLM decides what to do next.
+When the LLM wants to use a tool, it says *"I want to call X with these arguments."* The graph executes it and feeds the
+result back — then the LLM decides what to do next.
 
 ```
   LLM                  Graph                  Tool
-   |                     |                     |
+   |                      |                     |
    |--"call run_sql"--->  |                     |
    |    ("SELECT ...")    |---execute handler-> |
-   |                      |                    |
+   |                      |                     |
    |                      |<--DbResultEvent---- |
    |<--here are results-- |                     |
    |                      |
@@ -41,9 +43,11 @@ When the LLM wants to use a tool, it says *"I want to call X with these argument
 
 ### `think` — Reason Before Acting
 
-**Why it exists:** small local models (like Qwen or LLaMA) do not have a built-in reasoning step. Without one, they can jump straight to writing SQL and get it wrong. The `think` tool forces the model to write down its reasoning first.
+**Why it exists:** small local models (like Qwen or LLaMA) do not have a built-in reasoning step. Without one, they can
+jump straight to writing SQL and get it wrong. The `think` tool forces the model to write down its reasoning first.
 
-**How it works:** the LLM calls `think("I should check the schema before writing the join...")`. The tool echoes it back as a `ThinkingEvent`. No side effects — it is just a named slot to externalise thought.
+**How it works:** the LLM calls `think("I should check the schema before writing the join...")`. The tool echoes it back
+as a `ThinkingEvent`. No side effects — it is just a named slot to externalise thought.
 
 ```
   think("I need to join orders and order_details...")
@@ -60,7 +64,8 @@ When the LLM wants to use a tool, it says *"I want to call X with these argument
 
 **Why it exists:** this is the core requirement — let the LLM query the Northwind database.
 
-**How it works:** the LLM provides a `SELECT` statement. Before it reaches the database, it passes through a safety guard.
+**How it works:** the LLM provides a `SELECT` statement. Before it reaches the database, it passes through a safety
+guard.
 
 ```
   LLM writes SQL
@@ -92,9 +97,11 @@ A rejected query never opens a database connection — it fails fast and safe.
 
 ### `db_schema` — Inspect Table Structure
 
-**Why it exists:** the LLM does not know the database schema ahead of time. Before writing SQL, it needs to know: what tables exist? what are the column names?
+**Why it exists:** the LLM does not know the database schema ahead of time. Before writing SQL, it needs to know: what
+tables exist? what are the column names?
 
-**How it works:** calls `information_schema` and returns formatted metadata. The LLM calls this first, then uses what it learned to write accurate SQL.
+**How it works:** calls `information_schema` and returns formatted metadata. The LLM calls this first, then uses what it
+learned to write accurate SQL.
 
 ```
   db_schema("orders")
@@ -111,7 +118,8 @@ A rejected query never opens a database connection — it fails fast and safe.
 
 ## How Tools Are Registered
 
-All tools are registered in one place: `library/registry/builtin_tools.py`. The graph reads this registry at startup and automatically:
+All tools are registered in one place: `library/registry/builtin_tools.py`. The graph reads this registry at startup and
+automatically:
 
 - Tells the LLM which tools exist (and what parameters they take)
 - Creates a node for each tool
@@ -165,7 +173,8 @@ tool_registry.register(ToolRegistration(
 ))
 ```
 
-**Step 4 — Done.** On the next `create_graph()` call, the LLM sees the new tool, a node is created for it, and it is wired into the graph automatically.
+**Step 4 — Done.** On the next `create_graph()` call, the LLM sees the new tool, a node is created for it, and it is
+wired into the graph automatically.
 
 ---
 

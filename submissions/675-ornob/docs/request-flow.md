@@ -10,7 +10,8 @@ Think of the agent like a smart research assistant:
 4. It runs the query
 5. It reads the results and answers you in plain English
 
-The difference from a regular assistant? Every step is logged, every tool call is tracked, and if the SQL fails, it automatically tries to fix it.
+The difference from a regular assistant? Every step is logged, every tool call is tracked, and if the SQL fails, it
+automatically tries to fix it.
 
 ---
 
@@ -50,18 +51,21 @@ The difference from a regular assistant? Every step is logged, every tool call i
 
 Before anything runs, the service checks: *"Does this user own this conversation thread?"*
 
-The first user to use a `thread_id` claims it. Anyone else gets an error immediately — the LLM never even sees the message.
+The first user to use a `thread_id` claims it. Anyone else gets an error immediately — the LLM never even sees the
+message.
 
 ### Step 2 — LLM Thinks
 
-The LLM receives the full conversation history (every message from every prior turn). It decides what to do next — usually inspect the schema first, then write SQL.
+The LLM receives the full conversation history (every message from every prior turn). It decides what to do next —
+usually inspect the schema first, then write SQL.
 
 ### Step 3 — Tools Run
 
-The graph executes whichever tool the LLM requested, feeds the result back, and the LLM thinks again. This loop repeats until the LLM stops calling tools.
+The graph executes whichever tool the LLM requested, feeds the result back, and the LLM thinks again. This loop repeats
+until the LLM stops calling tools.
 
 ```
-  ┌─────┐    wants tool    ┌──────────┐    result    ┌─────┐
+  ┌─────┐    wants tool    ┌──────────┐    result     ┌─────┐
   │ LLM │ ───────────────► │ Tool     │ ────────────► │ LLM │
   └─────┘                  │ executes │               └──┬──┘
                            └──────────┘                  │
@@ -75,7 +79,8 @@ The graph executes whichever tool the LLM requested, feeds the result back, and 
 
 ### Step 4 — Final Answer
 
-When the LLM produces a response with no tool calls, the graph ends. The service converts the raw state into typed event objects and returns them.
+When the LLM produces a response with no tool calls, the graph ends. The service converts the raw state into typed event
+objects and returns them.
 
 ---
 
@@ -99,7 +104,8 @@ There is no special memory module. **The agent remembers because it reads the en
   LLM replies:  "Your name is Alice."
 ```
 
-LangGraph stores this history in a `MemorySaver` — a Python dict keyed by `thread_id`. Each new turn appends to the list; the full list goes to the LLM every time.
+LangGraph stores this history in a `MemorySaver` — a Python dict keyed by `thread_id`. Each new turn appends to the
+list; the full list goes to the LLM every time.
 
 Different `thread_id` — completely separate conversation, no memory shared.
 
@@ -140,19 +146,20 @@ Maximum 3 retries. After the 3rd failure the agent tells the user the query coul
 
 The agent does not return a string. It returns a list of typed events:
 
-| Event | What it contains |
-|---|---|
-| `ThinkingEvent` | The LLM's chain-of-thought from the `think` tool |
-| `DbResultEvent` | The SQL that ran + the rows returned |
-| `AssistantTextEvent` | The final plain-English answer |
-| `ErrorEvent` | What went wrong (guard rejection, DB failure, ownership violation) |
-| `DoneEvent` | Always last — signals the response is complete |
+| Event                | What it contains                                                   |
+|----------------------|--------------------------------------------------------------------|
+| `ThinkingEvent`      | The LLM's chain-of-thought from the `think` tool                   |
+| `DbResultEvent`      | The SQL that ran + the rows returned                               |
+| `AssistantTextEvent` | The final plain-English answer                                     |
+| `ErrorEvent`         | What went wrong (guard rejection, DB failure, ownership violation) |
+| `DoneEvent`          | Always last — signals the response is complete                     |
 
 ---
 
 ## Streaming
 
-Instead of waiting for the full answer, `stream_turn` yields tokens one by one as the LLM generates them — useful for displaying a live typing effect in a UI.
+Instead of waiting for the full answer, `stream_turn` yields tokens one by one as the LLM generates them — useful for
+displaying a live typing effect in a UI.
 
 ```
   Caller                           Agent
