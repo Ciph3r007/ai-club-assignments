@@ -37,12 +37,10 @@ class Settings(BaseSettings):
     @field_validator("ollama_fallback_models", mode="before")
     @classmethod
     def _parse_fallback_models(cls, v: object) -> object:
-        """Accept comma-separated strings from env vars.
-
-        Allows ``OLLAMA_FALLBACK_MODELS=qwen3:8b,llama3.2`` in addition to
-        the JSON-array form ``["qwen3:8b","llama3.2"]`` that pydantic-settings
-        would otherwise require for ``list[str]`` fields.
-        """
+        # pydantic-settings JSON-parses list[str] fields at the source level,
+        # before validators run, so env vars must use JSON-array syntax:
+        # OLLAMA_FALLBACK_MODELS=["qwen3:8b","llama3.2"]
+        # This validator handles the already-split list case (e.g. from code/tests).
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v

@@ -71,7 +71,7 @@ def validate_sql(sql: str) -> str:
     Raises ``SqlGuardError`` on the first failing rule.  The error message for
     the ``select-only`` rule is interpolated with the actual statement prefix.
     """
-    normalized = sql.strip()
+    normalized = sql.strip().rstrip(";").strip()
     for rule in _RULES:
         if not rule.check(normalized):
             msg = rule.error
