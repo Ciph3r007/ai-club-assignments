@@ -70,7 +70,7 @@ _STREAM_PRINTERS: dict[str, Any] = {
 
 
 def print_events(events: Iterable[Any]) -> None:
-    """Print each event in *events* using a human-readable format."""
+    """Print each event in events using a human-readable format."""
     for event in events:
         printer = _EVENT_PRINTERS.get(event.type)
         if printer:

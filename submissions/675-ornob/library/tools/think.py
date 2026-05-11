@@ -27,7 +27,7 @@ class ThinkHandler:
 
 # Backward-compatible module-level function (used by notebooks directly).
 def handle_think(thought: str) -> ThinkingEvent:
-    """Return a `ThinkingEvent` for *thought*."""
+    """Return a `ThinkingEvent` for thought."""
     return ThinkingEvent(content=thought)
 
 

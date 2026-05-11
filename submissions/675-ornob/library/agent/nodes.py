@@ -54,7 +54,7 @@ _TOOL_CALL_FENCE_PATTERNS: tuple[str, ...] = (
 
 
 def _extract_json_objects(text: str) -> list[str]:
-    """Extract every brace-balanced JSON object from *text*."""
+    """Extract every brace-balanced JSON object from text."""
     objects: list[str] = []
     depth = 0
     start = -1
@@ -139,8 +139,8 @@ async def tool_node(
 ) -> dict[str, Any]:
     """Generic tool execution node - resolves handler from `tool_registry`.
 
-    Pass *registry* in tests to avoid patching the module-level singleton.
-    `graph_factory` creates partials without *registry* so they use the global.
+    Pass registry in tests to avoid patching the module-level singleton.
+    `graph_factory` creates partials without registry so they use the global.
     """
     _registry = registry if registry is not None else tool_registry
     last = state["messages"][-1]

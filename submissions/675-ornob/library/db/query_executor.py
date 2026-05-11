@@ -135,7 +135,7 @@ class QueryExecutor:
     # ------------------------------------------------------------------
 
     def _run_sync(self, sql: str) -> QueryResult:
-        """Execute *sql* synchronously, applying the row cap.
+        """Execute sql synchronously, applying the row cap.
 
         Intended to be called via `asyncio.to_thread`.  Timeout is enforced
         server-side by setting `statement_timeout` on the connection.

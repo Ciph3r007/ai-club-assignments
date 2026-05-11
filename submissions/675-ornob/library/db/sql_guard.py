@@ -64,7 +64,7 @@ _RULES: tuple[SqlValidationRule, ...] = (
 
 
 def validate_sql(sql: str) -> str:
-    """Validate *sql* against `_RULES` and return the normalised statement.
+    """Validate sql against `_RULES` and return the normalised statement.
 
     Raises `SqlGuardError` on the first failing rule.  The error message for
     the `select-only` rule is interpolated with the actual statement prefix.

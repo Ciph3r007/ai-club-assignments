@@ -35,7 +35,7 @@ class ErrorMapper:
     """Maps exception types to `ErrorEvent` without multi-except chains.
 
     Raises `ConfigurationError` at construction if any parent type appears
-    before one of its subclasses in *mapping* (which would make that subclass
+    before one of its subclasses in mapping (which would make that subclass
     entry unreachable).
     """
 

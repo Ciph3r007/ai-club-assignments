@@ -6,7 +6,7 @@ extra fields required by the querygraph-agent graph.
 
 The `add_messages` reducer appended by `MessagesState` ensures that each
 graph node can return `{"messages": [...new messages...]}` and LangGraph
-will *append* those messages to the running list rather than replacing it,
+will append those messages to the running list rather than replacing it,
 giving the agent its message history.
 """
 

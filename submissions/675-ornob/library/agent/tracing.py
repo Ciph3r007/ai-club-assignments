@@ -31,10 +31,10 @@ def current_turn_messages(state: dict[str, Any]) -> list[Any]:
 
 
 def tool_call_names(messages: list[Any]) -> list[str]:
-    """Return ordered tool-call names from *messages*.
+    """Return ordered tool-call names from messages.
 
     Collects the `name` field from every tool call on every `AIMessage`
-    in *messages*, preserving invocation order.
+    in messages, preserving invocation order.
     """
     names: list[str] = []
     for msg in messages:
