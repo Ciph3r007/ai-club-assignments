@@ -100,15 +100,24 @@ _SCHEMA_QUERY_ALL = """
     ORDER BY table_schema, table_name, ordinal_position
 """
 
-_SCHEMA_QUERIES: dict[bool, str] = {
-    True: _SCHEMA_QUERY_FILTERED,
-    False: _SCHEMA_QUERY_ALL,
+@dataclass(frozen=True)
+class _SchemaQuery:
+    sql: str
+    params: Callable[[str | None], dict[str, Any]]
+
+
+_SCHEMA_QUERY_CONFIG: dict[bool, _SchemaQuery] = {
+    True: _SchemaQuery(
+        sql=_SCHEMA_QUERY_FILTERED,
+        params=lambda t: {"table_name": t, "schemas": list(_SYSTEM_SCHEMAS)},
+    ),
+    False: _SchemaQuery(
+        sql=_SCHEMA_QUERY_ALL,
+        params=lambda _: {"schemas": list(_SYSTEM_SCHEMAS)},
+    ),
 }
 
-_SCHEMA_PARAMS: dict[bool, Callable[[str | None], dict[str, Any]]] = {
-    True: lambda t: {"table_name": t, "schemas": list(_SYSTEM_SCHEMAS)},
-    False: lambda _: {"schemas": list(_SYSTEM_SCHEMAS)},
-}
+_MS_PER_SECOND: int = 1000
 
 
 class QueryExecutor:
@@ -183,7 +192,7 @@ class QueryExecutor:
         server-side by setting `statement_timeout` on the connection.
         """
         limited_sql = self._apply_limit(sql)
-        timeout_ms = int(self._settings.db_query_timeout_seconds * 1000)
+        timeout_ms = int(self._settings.db_query_timeout_seconds * _MS_PER_SECOND)
         with self._engine.connect() as conn:
             conn.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
             cursor_result = conn.execute(text(limited_sql))
@@ -194,7 +203,8 @@ class QueryExecutor:
 
     def _apply_limit(self, sql: str) -> str:
         """Append a LIMIT clause if the statement doesn't already have one."""
-        return _LIMIT_STRATEGIES[bool(_LIMIT_RE.search(sql))](sql, self._settings.db_max_rows)
+        has_limit = bool(_LIMIT_RE.search(sql))
+        return _LIMIT_STRATEGIES[has_limit](sql, self._settings.db_max_rows)
 
     def _run_schema_sync(self, table_name: str | None) -> SchemaInfo:
         """Query `information_schema.columns` synchronously.
@@ -202,8 +212,9 @@ class QueryExecutor:
         Intended to be called via `asyncio.to_thread`.
         """
         filtered = table_name is not None
-        stmt = text(_SCHEMA_QUERIES[filtered]).bindparams(bindparam("schemas", expanding=True))
-        params = _SCHEMA_PARAMS[filtered](table_name)
+        query = _SCHEMA_QUERY_CONFIG[filtered]
+        stmt = text(query.sql).bindparams(bindparam("schemas", expanding=True))
+        params = query.params(table_name)
 
         with self._engine.connect() as conn:
             rows = conn.execute(stmt, params).fetchall()

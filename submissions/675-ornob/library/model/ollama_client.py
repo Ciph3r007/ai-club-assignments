@@ -85,20 +85,17 @@ class OllamaClient:
             ModelToolCallError: When every candidate in the fallback sequence fails.
         """
         candidates = [primary_model, *self._settings.ollama_fallback_models]
-        last_exc: Exception | None = None
+        errors: list[ModelToolCallError] = []
 
         for model_name in candidates:
             try:
                 return self._create_model(model_name)
             except ModelToolCallError as exc:
-                last_exc = exc
-                continue
+                errors.append(exc)
 
-        # All candidates exhausted - this branch is only reached if every
-        # _create_model call raised ModelToolCallError.
         raise ModelToolCallError(
-            f"All model fallbacks exhausted.  Tried: {candidates}.  Last error: {last_exc}"
-        ) from last_exc
+            f"All model fallbacks exhausted. Tried: {candidates}. Last error: {errors[-1]}"
+        ) from errors[-1]
 
 
 __all__ = ["OllamaClient"]

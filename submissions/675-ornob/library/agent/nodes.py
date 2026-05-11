@@ -38,7 +38,11 @@ _TOOL_CONTENT_EXTRACTORS: dict[str, Callable[[Any], str]] = {
 
 
 def _to_tool_content(event: Any) -> str:
-    """Serialize an agent event to a string for a `ToolMessage`."""
+    """Serialize an agent event to a string for a `ToolMessage`.
+
+    Known types (thinking, assistant_text) extract `.content` directly.
+    All other event types fall back to full JSON via `model_dump_json()`.
+    """
     extractor = _TOOL_CONTENT_EXTRACTORS.get(event.type)
     return extractor(event) if extractor else event.model_dump_json()
 

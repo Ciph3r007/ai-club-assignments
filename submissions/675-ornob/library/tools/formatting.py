@@ -12,6 +12,11 @@ from typing import Any
 from library.api.events import DbResultEvent
 
 
+def _column_width(col: str, rows: list[dict[str, Any]]) -> int:
+    content_width = max((len(str(row.get(col, ""))) for row in rows), default=0)
+    return max(len(col), content_width)
+
+
 def format_db_result(event: DbResultEvent) -> str:
     """Format a DbResultEvent as a labelled ASCII table.
 
@@ -38,10 +43,7 @@ def format_db_result(event: DbResultEvent) -> str:
         return "\n".join(lines) + "\n"
 
     columns = list(event.rows[0].keys())
-    col_widths = [
-        max(len(col), max((len(str(row.get(col, ""))) for row in event.rows), default=0))
-        for col in columns
-    ]
+    col_widths = [_column_width(col, event.rows) for col in columns]
 
     header = "  ".join(col.ljust(w) for col, w in zip(columns, col_widths))
     separator = "  ".join("-" * w for w in col_widths)
