@@ -44,10 +44,10 @@ Built on **LangGraph** (graph-based agent orchestration), **Ollama** (local LLM)
 ┌─────────────────────────────────────────────────────────┐
 │              LangGraph StateGraph (compiled)            │
 │                                                         │
-│   ┌─────────────┐    ┌──────────────┐    ┌──────────┐  │
-│   │ call_model  │───▶│  tool nodes  │───▶│sql_repair│  │
-│   │  (Ollama)   │◀───│  (think /    │    │  _node   │  │
-│   └─────────────┘    │  run_sql /   │    └──────────┘  │
+│   ┌─────────────┐    ┌──────────────┐    ┌──────────┐   │
+│   │ call_model  │───▶│  tool nodes  │───▶│sql_repair│   │
+│   │  (Ollama)   │◀───│  (think /    │    │  _node   │   │
+│   └─────────────┘    │  run_sql /   │    └──────────┘   │
 │                      │  db_schema)  │                   │
 │                      └──────────────┘                   │
 │                                                         │
@@ -63,10 +63,10 @@ Built on **LangGraph** (graph-based agent orchestration), **Ollama** (local LLM)
             └─────────┘ └────────┘ └──────────┘
                                         │
                                         ▼
-                                  ┌───────────┐
+                                  ┌────────────┐
                                   │ PostgreSQL │
                                   │ (Northwind)│
-                                  └───────────┘
+                                  └────────────┘
 ```
 
 ---

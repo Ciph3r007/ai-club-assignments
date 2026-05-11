@@ -6,7 +6,9 @@ How tools are defined, registered, executed, and how to add a new one.
 
 ## What Is a Tool?
 
-In LangGraph, a tool is a function the LLM can call by name. The model sees a JSON schema describing the tool's name, description, and parameters. When it decides to use a tool, it emits an `AIMessage` with a `tool_calls` list. The graph routes that message to the corresponding tool node, executes it, and feeds the result back as a `ToolMessage`.
+In LangGraph, a tool is a function the LLM can call by name. The model sees a JSON schema describing the tool's name,
+description, and parameters. When it decides to use a tool, it emits an `AIMessage` with a `tool_calls` list. The graph
+routes that message to the corresponding tool node, executes it, and feeds the result back as a `ToolMessage`.
 
 This project wraps that concept in three layers:
 
@@ -22,7 +24,8 @@ tool_node()          ← generic LangGraph node that resolves handler from regis
 
 ## The Registry
 
-`ToolRegistry` (in `library/registry/tool_registry.py`) is the single source of truth. The graph reads it at build time to:
+`ToolRegistry` (in `library/registry/tool_registry.py`) is the single source of truth. The graph reads it at build time
+to:
 
 - Generate the tool schema list bound to Ollama
 - Create a node for each tool
@@ -63,7 +66,8 @@ Input:  thought (str) — the model's reasoning
 Output: ThinkingEvent(type="thinking", content=thought)
 ```
 
-Implementation (`tools/think.py`): one line — create and return a `ThinkingEvent`. No side effects, no I/O. The model calls this before making decisions; the graph stores the result as a `ToolMessage` in state.
+Implementation (`tools/think.py`): one line — create and return a `ThinkingEvent`. No side effects, no I/O. The model
+calls this before making decisions; the graph stores the result as a `ToolMessage` in state.
 
 `has_retry=False` — a think call can never fail in a meaningful way.
 
@@ -102,7 +106,8 @@ QueryExecutor.execute()
 DbResultEvent(sql, rows, row_count)
 ```
 
-On any failure: returns `ErrorEvent`. `tool_node` sees `event.type == "error"` and increments `sql_retry_count`. `route_after_db_query` then decides whether to retry.
+On any failure: returns `ErrorEvent`. `tool_node` sees `event.type == "error"` and increments `sql_retry_count`.
+`route_after_db_query` then decides whether to retry.
 
 `has_retry=True` — wires a conditional edge so failures trigger `sql_repair_node`.
 
@@ -130,6 +135,7 @@ partial(tool_node, executor=executor, tool_name="run_sql")
 ```
 
 At runtime, `tool_node`:
+
 1. Reads `state["messages"][-1]` — must be an `AIMessage` with `tool_calls`.
 2. Looks up the handler from the registry by `tool_name`.
 3. Calls `handler.handle(executor, **tool_call["args"])`.
@@ -179,7 +185,8 @@ tool_registry.register(ToolRegistration(
 ))
 ```
 
-**4. Done.** The graph picks it up automatically on the next `create_graph()` call. The LLM sees the new tool in its schema. No changes to `graph_factory.py`, `router.py`, or `nodes.py`.
+**4. Done.** The graph picks it up automatically on the next `create_graph()` call. The LLM sees the new tool in its
+schema. No changes to `graph_factory.py`, `router.py`, or `nodes.py`.
 
 ---
 
@@ -195,7 +202,9 @@ call_sequence = current_turn_tool_call_names(state)
 ```
 
 Internals:
-- `current_turn_messages(state)` — slices `state["messages"]` from after the last user `HumanMessage` (skipping `name="repair"` messages injected by `sql_repair_node`)
+
+- `current_turn_messages(state)` — slices `state["messages"]` from after the last user `HumanMessage` (skipping
+  `name="repair"` messages injected by `sql_repair_node`)
 - `tool_call_names(messages)` — extracts `tc["name"]` from every `AIMessage.tool_calls`
 
 Used in notebook Case 6 to verify `think` fires before `run_sql`.
