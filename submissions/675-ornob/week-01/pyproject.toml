@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "querygraph-agent"
+name = "week-01-agent"
 version = "0.1.0"
 description = "A reusable multi-turn conversational query agent built on LangGraph, Ollama, and PostgreSQL"
 readme = "README.md"
@@ -51,14 +51,12 @@ test = [
     "pytest-asyncio>=0.23",
 ]
 
-[project.scripts]
-querygraph-agent = "querygraph_agent.__main__:main"
-
 [tool.setuptools.packages.find]
-where = ["src"]
+where = [".."]
+include = ["library*"]
 
 [tool.setuptools.package-data]
-querygraph_agent = ["py.typed"]
+library = ["py.typed"]
 
 # ---------------------------------------------------------------------------
 # Ruff
@@ -74,7 +72,7 @@ fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["querygraph_agent"]
+known-first-party = ["library"]
 
 # ---------------------------------------------------------------------------
 # Mypy
@@ -82,7 +80,7 @@ known-first-party = ["querygraph_agent"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
-packages = ["querygraph_agent"]
+packages = ["library"]
 
 [[tool.mypy.overrides]]
 module = ["langgraph.*", "langchain_ollama.*", "langchain_core.*"]
