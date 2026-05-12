@@ -34,6 +34,7 @@ from library.agent.content import ai_message_to_text
 from library.agent.nodes import (
     call_model_node,
     sql_repair_node,
+    think_gate_node,
     tool_node,
 )
 from library.agent.router import route_after_db_query, route_after_model
@@ -89,7 +90,12 @@ def create_graph(
     builder: StateGraph[AgentState] = StateGraph(AgentState)
     builder.add_node(
         "call_model",
-        partial(call_model_node, model=model_with_tools, system_prompt=settings.system_prompt),
+        partial(
+            call_model_node,
+            model=model_with_tools,
+            system_prompt=settings.system_prompt,
+            max_context_messages=settings.max_context_messages,
+        ),
     )
     builder.add_node("sql_repair_node", sql_repair_node)
 
@@ -100,9 +106,15 @@ def create_graph(
         )
         _EDGE_ADDERS[reg.has_retry](builder, reg)
 
+    route_fn = partial(route_after_model, think_required=settings.think_required)
+
     builder.set_entry_point("call_model")
-    builder.add_conditional_edges("call_model", route_after_model)
+    builder.add_conditional_edges("call_model", route_fn)
     builder.add_edge("sql_repair_node", "call_model")
+
+    if settings.think_required:
+        builder.add_node("think_gate_node", think_gate_node)
+        builder.add_conditional_edges("think_gate_node", route_fn)
 
     return builder.compile(checkpointer=_checkpointer)
 

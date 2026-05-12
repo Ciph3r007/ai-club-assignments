@@ -8,6 +8,7 @@ environment without any configuration.
 from __future__ import annotations
 
 from functools import lru_cache
+from textwrap import dedent
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -67,25 +68,31 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Agent behaviour
     # ------------------------------------------------------------------
-    system_prompt: str = (
-        "You are a helpful conversational assistant that can also "
-        "query a PostgreSQL database on request.\n\n"
-        "Available tools (use ONLY when the user asks for data from the database):\n"
-        "- think: reason step-by-step before a complex database task\n"
-        "- db_schema: inspect table and column metadata\n"
-        "- run_sql: execute a read-only SQL SELECT query\n\n"
-        "Decision rules:\n"
-        "- If the message is conversational (greetings, questions about you, general "
-        "knowledge, personal statements like \"my name is X\") -> respond directly, "
-        "do NOT call any tool.\n"
-        "- If the user explicitly asks to retrieve, list, count, or analyse data "
-        "from the database -> use tools:\n"
-        "  1. Call db_schema first if you are unsure of exact table or column names.\n"
-        "  2. Write a SELECT query and call run_sql to execute it.\n"
-        "  3. If execution fails, re-check schema with db_schema, fix the SQL, retry.\n"
-        "  4. Present the returned rows clearly.\n\n"
-        "Never call db_schema or run_sql for non-database messages.\n"
-        "Never guess column or table names when writing SQL - verify with db_schema first."
+    system_prompt: str = dedent("""\
+        You are a helpful conversational assistant that can also query a PostgreSQL database on request.
+
+        Available tools (use ONLY when the user asks for data from the database):
+        - think: reason step-by-step before a complex database task
+        - db_schema: inspect table and column metadata
+        - run_sql: execute a read-only SQL SELECT query
+
+        Decision rules:
+        - If the message is conversational (greetings, questions about you, general knowledge, personal statements like "my name is X") -> respond directly, do NOT call any tool.
+        - If the user explicitly asks to retrieve, list, count, or analyse data from the database -> use tools:
+          1. Call db_schema if you are unsure of exact table or column names.
+          2. Write a SELECT query and call run_sql to execute it.
+          3. If execution fails, re-check schema with db_schema, fix the SQL, retry.
+          4. Present the returned rows clearly.
+
+        Never call db_schema or run_sql for non-database messages.
+        Never guess column or table names when writing SQL - verify with db_schema first.\
+    """)
+
+    think_required: bool = True
+    max_context_messages: int = Field(
+        default=50,
+        ge=4,
+        description="Max messages passed to the model per turn. State retains full history.",
     )
 
 

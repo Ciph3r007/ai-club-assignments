@@ -20,7 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 
 from library.agent.router import MAX_SQL_RETRIES, REPAIR_TURN_NAME
 from library.agent.state import AgentState
@@ -147,10 +147,15 @@ async def call_model_node(
     state: AgentState,
     model: BaseChatModel,
     system_prompt: str,
+    max_context_messages: int,
 ) -> dict[str, Any]:
-    """Invoke the LLM; inject system prompt; apply Ollama fallback parser."""
-    messages = [SystemMessage(content=system_prompt), *state["messages"]]
-    response = await model.ainvoke(messages)
+    """Invoke the LLM; inject system prompt; apply Ollama fallback parser.
+
+    Trims the message history to the last `max_context_messages` before
+    sending to the model — state retains the full history for tracing.
+    """
+    history = state["messages"][-max_context_messages:]
+    response = await model.ainvoke([SystemMessage(content=system_prompt), *history])
     return {"messages": [_repair_ollama_response(response)]}
 
 
@@ -182,6 +187,31 @@ async def tool_node(
     return {"messages": [tool_msg], **extra}
 
 
+async def think_gate_node(state: AgentState) -> dict[str, Any]:
+    """Inject a synthetic think step before the pending DB tool call.
+
+    Removes the model's AIMessage (which called a DB tool without thinking first),
+    inserts a think AIMessage + ToolMessage, then re-appends the original DB tool
+    AIMessage so it remains last and tool_node can read it normally.
+    """
+    last = state["messages"][-1]
+    tool_call = last.tool_calls[0]
+
+    thought = (
+        f"I need to call {tool_call['name']} with args {tool_call['args']}. "
+        "Let me reason about the query before proceeding."
+    )
+    think_id = f"call_{uuid.uuid4().hex[:8]}"
+    think_ai = AIMessage(
+        content="",
+        tool_calls=[{"id": think_id, "name": "think", "args": {"thought": thought}, "type": "tool_call"}],
+    )
+    think_tm = ToolMessage(content=thought, tool_call_id=think_id)
+    db_ai = AIMessage(content=last.content, tool_calls=last.tool_calls)
+
+    return {"messages": [RemoveMessage(id=last.id), think_ai, think_tm, db_ai]}
+
+
 async def sql_repair_node(state: AgentState) -> dict[str, Any]:
     """Inject a targeted repair prompt so the LLM can self-correct failed SQL."""
     retry_count: int = state.get("sql_retry_count", 0)  # type: ignore[assignment]
@@ -192,5 +222,6 @@ async def sql_repair_node(state: AgentState) -> dict[str, Any]:
 __all__ = [
     "call_model_node",
     "sql_repair_node",
+    "think_gate_node",
     "tool_node",
 ]

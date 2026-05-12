@@ -23,20 +23,33 @@ _QUERY_ROUTE: dict[bool, Literal["sql_repair_node", "call_model"]] = {
     False: "call_model",
 }
 
+_DB_TOOLS: frozenset[str] = frozenset({"run_sql", "db_schema"})
 
-def route_after_model(state: AgentState) -> str:
+
+def route_after_model(state: AgentState, *, think_required: bool = False) -> str:
     """Route to the tool-handler node named by `tool_registry.routes()`.
+
+    When `think_required=True`, intercepts DB tool calls that have not been
+    preceded by a `think` call this turn and routes to `think_gate_node` first.
 
     Returns `"__end__"` when there are no tool calls or the tool name is
     not registered.
     """
     # Import inside function to avoid circular imports at module load time.
+    from library.agent.tracing import current_turn_tool_call_names
     from library.registry.tool_registry import tool_registry
 
     last = state["messages"][-1]
     if not hasattr(last, "tool_calls") or not last.tool_calls:
         return "__end__"
-    return tool_registry.routes().get(last.tool_calls[0]["name"], "__end__")
+
+    tool_name = last.tool_calls[0]["name"]
+
+    if think_required and tool_name in _DB_TOOLS:
+        if "think" not in current_turn_tool_call_names(state):
+            return "think_gate_node"
+
+    return tool_registry.routes().get(tool_name, "__end__")
 
 
 def route_after_db_query(
@@ -52,4 +65,4 @@ def route_after_db_query(
     return _QUERY_ROUTE[0 < retry_count <= MAX_SQL_RETRIES]
 
 
-__all__ = ["MAX_SQL_RETRIES", "REPAIR_TURN_NAME", "route_after_db_query", "route_after_model"]
+__all__ = ["MAX_SQL_RETRIES", "REPAIR_TURN_NAME", "_DB_TOOLS", "route_after_db_query", "route_after_model"]
